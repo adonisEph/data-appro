@@ -1,6 +1,6 @@
 # Data Approvisionnement — Airtel CG
 
-Application interne de gestion et d'automatisation des approvisionnements data pour les 200 agents de l'entreprise via l'API Airtel Money Congo Brazzaville.
+Application Professionnelle interne de gestion et d'automatisation des approvisionnements data pour les 200 agents de l'entreprise via l'API Airtel Money Congo Brazzaville.
 
 ## Stack technique
 

@@ -5,8 +5,8 @@ compatibility_flags = ["nodejs_compat"]
 
 [[d1_databases]]
 binding = "DB"
-database_name = "data-appro-db"
-database_id = "REMPLACER_PAR_TON_D1_DATABASE_ID"
+database_name = "data-appro"
+database_id = "4fdf700b-67ed-4391-9e0c-7a648e6652b9"
 # → Crée la DB : npx wrangler d1 create data-appro-db
 # → Copie l'ID retourné et remplace ci-dessus
 
