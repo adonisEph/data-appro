@@ -9,7 +9,7 @@ Application interne de gestion et d'automatisation des approvisionnements data p
 | Frontend | React 18 + TypeScript + Vite + Tailwind CSS |
 | Backend | Cloudflare Workers + Hono |
 | Base de données | Cloudflare D1 (SQLite) |
-| Hébergement | Cloudflare Pages + Workers |
+| Hébergement | Cloudflare Pages + Workers  |
 | CI/CD | GitHub → Cloudflare (auto-deploy) |
 
 ## Structure du projet
