@@ -21,31 +21,43 @@ api.get('/health', c => c.json({ ok: true, service: 'data-appro-worker', ts: new
 // ══════════════════════════════════════════════════════════
 
 api.post('/auth/login', async c => {
-  const { email, password } = await c.req.json<{ email: string; password: string }>();
-  if (!email || !password) return c.json({ error: 'email et password requis' }, 400);
+  try {
+    const body = await c.req.json<{ email: string; password: string }>();
+    const email = body?.email;
+    const password = body?.password;
 
-  const resp = await c.env.DB.prepare(
-    `SELECT r.id, r.agent_id, r.email, r.password_hash, a.nom, a.prenom
-     FROM responsables r JOIN agents a ON a.id = r.agent_id
-     WHERE r.email = ? AND r.actif = 1`
-  ).bind(email).first<{ id: number; agent_id: number; email: string; password_hash: string; nom: string; prenom: string }>();
+    if (!email || !password) return c.json({ error: 'email et password requis' }, 400);
 
-  if (!resp) return c.json({ error: 'Identifiants invalides' }, 401);
+    // Recherche du responsable
+    const resp = await c.env.DB.prepare(
+      `SELECT r.id, r.agent_id, r.email, r.password_hash, a.nom, a.prenom
+       FROM responsables r JOIN agents a ON a.id = r.agent_id
+       WHERE r.email = ? AND r.actif = 1`
+    ).bind(email).first<{ id: number; agent_id: number; email: string; password_hash: string; nom: string; prenom: string }>();
 
-  // Vérification du hash bcrypt-like (SHA-256 simple pour CF Workers)
-  const encoder = new TextEncoder();
-  const hashBuffer = await crypto.subtle.digest('SHA-256', encoder.encode(password + resp.id));
-  const hash = btoa(String.fromCharCode(...new Uint8Array(hashBuffer)));
+    if (!resp) return c.json({ error: 'Identifiants invalides' }, 401);
 
-  if (hash !== resp.password_hash) return c.json({ error: 'Identifiants invalides' }, 401);
+    // Hash SHA-256 : password + responsable_id
+    const encoder = new TextEncoder();
+    const hashBuffer = await crypto.subtle.digest('SHA-256', encoder.encode(password + String(resp.id)));
+    const hashArray = Array.from(new Uint8Array(hashBuffer));
+    const hash = btoa(hashArray.map(b => String.fromCharCode(b)).join(''));
 
-  const token = await generateJWT(c.env.JWT_SECRET, {
-    sub: String(resp.id),
-    email: resp.email,
-    agent_id: resp.agent_id,
-  });
+    if (hash !== resp.password_hash) return c.json({ error: 'Identifiants invalides' }, 401);
 
-  return c.json({ token, user: { nom: resp.nom, prenom: resp.prenom, email: resp.email } });
+    const token = await generateJWT(c.env.JWT_SECRET, {
+      sub: String(resp.id),
+      email: resp.email,
+      agent_id: resp.agent_id,
+    });
+
+    return c.json({ token, user: { nom: resp.nom, prenom: resp.prenom, email: resp.email } });
+
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error('[Login Error]', msg);
+    return c.json({ error: 'Erreur serveur interne', detail: msg }, 500);
+  }
 });
 
 // ══════════════════════════════════════════════════════════
