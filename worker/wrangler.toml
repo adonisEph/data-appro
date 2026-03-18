@@ -1,0 +1,33 @@
+name = "data-appro-worker"
+main = "src/index.ts"
+compatibility_date = "2024-07-01"
+compatibility_flags = ["nodejs_compat"]
+
+[[d1_databases]]
+binding = "DB"
+database_name = "data-appro-db"
+database_id = "REMPLACER_PAR_TON_D1_DATABASE_ID"
+# → Crée la DB : npx wrangler d1 create data-appro-db
+# → Copie l'ID retourné et remplace ci-dessus
+
+[vars]
+ENVIRONMENT         = "production"
+AIRTEL_BASE_URL     = "https://openapi.airtel.cg"
+# ⚠️  En UAT (tests) utiliser : https://openapiuat.airtel.cg
+AIRTEL_COUNTRY_CODE = "CG"
+AIRTEL_CURRENCY     = "XAF"
+
+# ── Secrets à configurer via : npx wrangler secret put NOM ──
+#
+# AIRTEL_CLIENT_ID      → client_id du portail developers.airtel.cg
+# AIRTEL_CLIENT_SECRET  → client_secret du portail
+# AIRTEL_PIN            → ton PIN Airtel Money EN CLAIR (ex: "1234")
+#                         Le chiffrement RSA est automatique dans le code
+# JWT_SECRET            → openssl rand -base64 40
+#
+# x-signature et x-key sont calculés automatiquement à chaque requête
+# en utilisant la clé publique RSA Airtel embarquée dans services/airtel.ts
+
+[dev]
+port = 8787
+local_protocol = "http"

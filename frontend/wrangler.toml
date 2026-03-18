@@ -1,0 +1,13 @@
+# Configuration Cloudflare Pages (frontend uniquement)
+# Ce fichier permet à Cloudflare Pages de trouver sa config
+# quand Root directory = "frontend"
+
+name = "data-appro-frontend"
+compatibility_date = "2024-07-01"
+
+[build]
+command = "npm install && npm run build"
+destination = "dist"
+
+[build.environment]
+NODE_VERSION = "20"

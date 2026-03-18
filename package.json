@@ -1,0 +1,17 @@
+{
+  "name": "data-appro",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "build": "cd frontend && npm install && npm run build",
+    "build:frontend": "cd frontend && npm install && npm run build",
+    "dev": "cd frontend && npm install && npm run dev",
+    "deploy:worker": "cd worker && npm install && npx wrangler deploy",
+    "db:init": "npx wrangler d1 execute data-appro-db --local --file=migrations/001_schema.sql",
+    "db:migrate": "npx wrangler d1 execute data-appro-db --file=migrations/001_schema.sql",
+    "seed:admin": "node scripts/seed-admin.mjs"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

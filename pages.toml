@@ -1,0 +1,10 @@
+# Configuration Cloudflare Pages
+# Ce fichier est lu automatiquement par Cloudflare Pages au déploiement
+
+[build]
+command = "cd frontend && npm install && npm run build"
+destination = "frontend/dist"
+
+[build.environment]
+NODE_VERSION = "20"
+NPM_VERSION  = "10"
