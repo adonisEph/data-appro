@@ -4,7 +4,7 @@
 
 import type { Agent, Campagne, Transaction, DashboardStats } from '../types';
 
-const BASE = '/api';
+const BASE = 'https://data-appro-worker.jamesdjimby.workers.dev/api';
 
 function getToken(): string | null {
   return localStorage.getItem('appro_token');
