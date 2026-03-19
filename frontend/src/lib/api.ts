@@ -4,7 +4,7 @@
 
 import type { Agent, Campagne, Transaction, DashboardStats } from '../types';
 
-const BASE = (import.meta.env.VITE_API_URL ?? '') + '/api';
+const BASE = '/api';
 
 function getToken(): string | null {
   return localStorage.getItem('appro_token');

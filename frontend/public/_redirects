@@ -1,4 +1,3 @@
-[[redirects]]
-  from = "/*"
-  to = "/index.html"
-  status = 200
+/api/* https://data-appro-worker.jamesdjimby.workers.dev/api/:splat 200
+/webhooks/* https://data-appro-worker.jamesdjimby.workers.dev/webhooks/:splat 200
+/* /index.html 200
