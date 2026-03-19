@@ -9,6 +9,7 @@ import LoginPage from './pages/Login';
 import DashboardPage from './pages/Dashboard';
 import AgentsPage from './pages/Agents';
 import { CampagnesPage, CampagneDetailPage, NouvelleCampagnePage } from './pages/Campagnes';
+import UtilisateursPage from './pages/Utilisateurs';
 import HistoriquePage from './pages/Historique';
 import './index.css';
 
@@ -47,6 +48,7 @@ function App() {
                 <Route path="campagnes/nouvelle" element={<NouvelleCampagnePage />} />
                 <Route path="campagnes/:id" element={<CampagneDetailPage />} />
                 <Route path="historique" element={<HistoriquePage />} />
+              <Route path="utilisateurs" element={<UtilisateursPage />} />
               </Route>
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>

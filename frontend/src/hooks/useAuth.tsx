@@ -8,6 +8,7 @@ interface AuthContextType {
   login: (email: string, password: string) => Promise<void>;
   logout: () => void;
   isLoading: boolean;
+  isSuperAdmin: boolean;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
@@ -19,10 +20,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     const storedToken = localStorage.getItem('appro_token');
-    const storedUser = localStorage.getItem('appro_user');
+    const storedUser  = localStorage.getItem('appro_user');
     if (storedToken && storedUser) {
-      setToken(storedToken);
-      setUser(JSON.parse(storedUser));
+      try {
+        setToken(storedToken);
+        setUser(JSON.parse(storedUser));
+      } catch { /* ignore */ }
     }
     setIsLoading(false);
   }, []);
@@ -43,7 +46,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, token, login, logout, isLoading }}>
+    <AuthContext.Provider value={{
+      user, token, login, logout, isLoading,
+      isSuperAdmin: user?.is_super_admin ?? false,
+    }}>
       {children}
     </AuthContext.Provider>
   );

@@ -1,8 +1,8 @@
 // ============================================================
-// Client API — Fetch helpers vers le Cloudflare Worker
+// Client API — Fetch vers Cloudflare Worker
 // ============================================================
 
-import type { Agent, Campagne, Transaction, DashboardStats } from '../types';
+import type { Agent, Campagne, Transaction, DashboardStats, Responsable, User } from '../types';
 
 const BASE = 'https://data-appro-worker.jamesdjimby.workers.dev/api';
 
@@ -10,10 +10,7 @@ function getToken(): string | null {
   return localStorage.getItem('appro_token');
 }
 
-async function request<T>(
-  path: string,
-  options: RequestInit = {}
-): Promise<T> {
+async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const token = getToken();
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
@@ -25,6 +22,7 @@ async function request<T>(
 
   if (res.status === 401) {
     localStorage.removeItem('appro_token');
+    localStorage.removeItem('appro_user');
     window.location.href = '/login';
     throw new Error('Session expirée');
   }
@@ -37,7 +35,7 @@ async function request<T>(
 // --- Auth ---
 export const authApi = {
   login: (email: string, password: string) =>
-    request<{ token: string; user: { nom: string; prenom: string; email: string } }>('/auth/login', {
+    request<{ token: string; user: User }>('/auth/login', {
       method: 'POST',
       body: JSON.stringify({ email, password }),
     }),
@@ -47,16 +45,54 @@ export const authApi = {
 export const agentsApi = {
   list: () => request<{ agents: Agent[]; total: number }>('/agents'),
 
-  import: (agents: Array<{ nom: string; prenom: string; telephone: string; role: string }>) =>
+  get: (id: number) => request<{ agent: Agent }>(`/agents/${id}`),
+
+  import: (agents: Array<Partial<Agent>>) =>
     request<{ imported: number; skipped: number; errors: string[] }>('/agents/import', {
       method: 'POST',
       body: JSON.stringify({ agents }),
     }),
 
   update: (id: number, data: Partial<Agent>) =>
-    request<{ ok: boolean }>(`/agents/${id}`, {
+    request<{ ok: boolean; agent: Agent }>(`/agents/${id}`, {
       method: 'PUT',
       body: JSON.stringify(data),
+    }),
+
+  delete: (id: number) =>
+    request<{ ok: boolean }>(`/agents/${id}`, { method: 'DELETE' }),
+};
+
+// --- Utilisateurs (Super Admin) ---
+export const usersApi = {
+  list: () => request<{ users: Responsable[] }>('/users'),
+
+  create: (data: {
+    nom: string; prenom: string; telephone: string; email: string; password: string;
+    role?: string;
+    can_import_agents?: boolean; can_launch_campagne?: boolean;
+    can_view_historique?: boolean; can_manage_users?: boolean;
+  }) => request<{ ok: boolean; user_id: number }>('/users', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  }),
+
+  updateDroits: (id: number, data: {
+    can_import_agents?: boolean; can_launch_campagne?: boolean;
+    can_view_historique?: boolean; can_manage_users?: boolean;
+    actif?: boolean;
+  }) => request<{ ok: boolean }>(`/users/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify(data),
+  }),
+
+  delete: (id: number) =>
+    request<{ ok: boolean }>(`/users/${id}`, { method: 'DELETE' }),
+
+  resetPassword: (id: number, new_password: string) =>
+    request<{ ok: boolean }>(`/users/${id}/reset-password`, {
+      method: 'POST',
+      body: JSON.stringify({ new_password }),
     }),
 };
 
@@ -67,21 +103,16 @@ export const campagnesApi = {
   get: (id: number) =>
     request<{ campagne: Campagne; transactions: Transaction[] }>(`/campagnes/${id}`),
 
-  create: (data: {
-    mois: string;
-    budget_fcfa: number;
-    compte_source: string;
-    option_envoi: string;
-  }) =>
+  create: (data: { mois: string; budget_fcfa: number; compte_source: string; option_envoi: string }) =>
     request<{ ok: boolean; campagne_id: number }>('/campagnes', {
-      method: 'POST',
-      body: JSON.stringify(data),
+      method: 'POST', body: JSON.stringify(data),
     }),
 
   lancer: (id: number) =>
-    request<{ ok: boolean; message: string }>(`/campagnes/${id}/lancer`, {
-      method: 'POST',
-    }),
+    request<{ ok: boolean; message: string }>(`/campagnes/${id}/lancer`, { method: 'POST' }),
+
+  delete: (id: number) =>
+    request<{ ok: boolean }>(`/campagnes/${id}`, { method: 'DELETE' }),
 };
 
 // --- Historique ---
@@ -89,10 +120,7 @@ export const historiqueApi = {
   stats: () => request<DashboardStats>('/historique/stats'),
 
   transactions: (params: {
-    agent_id?: number;
-    campagne_id?: number;
-    statut?: string;
-    telephone?: string;
+    agent_id?: number; campagne_id?: number; statut?: string; telephone?: string;
   }) => {
     const qs = new URLSearchParams(
       Object.fromEntries(
@@ -107,7 +135,7 @@ export const historiqueApi = {
   },
 
   preuve: (txId: number) =>
-    request<{ preuve: Transaction & { mois: string; budget_fcfa: number; compte_source: string } }>(
+    request<{ preuve: Transaction & { mois: string; budget_fcfa: number } }>(
       `/historique/transactions/${txId}/preuve`
     ),
 };
