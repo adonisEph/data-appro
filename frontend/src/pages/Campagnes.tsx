@@ -113,11 +113,23 @@ export function CampagneDetailPage() {
     confirmes, echecs, enAttente, isLoading,
   } = useProvisionProgress(Number(id));
 
+  const [modeTest, setModeTest] = useState(false);
+  const [agentsSelectionnes, setAgentsSelectionnes] = useState<number[]>([]);
+
   const lancerMut = useMutation({
-    mutationFn: () => campagnesApi.lancer(Number(id)),
+    mutationFn: () => {
+      const token = localStorage.getItem('appro_token');
+      const body = modeTest && agentsSelectionnes.length > 0
+        ? JSON.stringify({ agent_ids: agentsSelectionnes })
+        : '{}';
+      return fetch(
+        `https://data-appro-worker.jamesdjimby.workers.dev/api/campagnes/${id}/lancer`,
+        { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }, body }
+      ).then(r => r.json()) as Promise<{ ok: boolean; message: string; agents_count: number }>;
+    },
     onSuccess: (res) => {
       toast.success('Provisionnement lancé !', res.message);
-      qc.invalidateQueries({ queryKey: ['campagne', id] });
+      qc.invalidateQueries({ queryKey: ['campagne-live', id] });
     },
     onError: (err: Error) => toast.error('Erreur lancement', err.message),
   });
@@ -245,11 +257,53 @@ export function CampagneDetailPage() {
         </Card>
       )}
 
+      {/* Mode test toggle */}
+      {campagne.statut === 'brouillon' && (
+        <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 space-y-3">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-semibold text-amber-900">Mode test</p>
+              <p className="text-xs text-amber-700">Envoyer uniquement à des agents sélectionnés avant le lancement global</p>
+            </div>
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input type="checkbox" checked={modeTest} onChange={e => setModeTest(e.target.checked)}
+                className="w-4 h-4 text-amber-600 rounded"/>
+              <span className="text-sm text-amber-800 font-medium">{modeTest ? 'Activé' : 'Désactivé'}</span>
+            </label>
+          </div>
+          {modeTest && (
+            <div>
+              <p className="text-xs font-medium text-amber-800 mb-2">
+                IDs des agents à tester (séparés par des virgules) :
+              </p>
+              <input
+                type="text"
+                placeholder="ex: 1, 5, 12"
+                className="w-full px-3 py-2 border border-amber-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-amber-400 bg-white"
+                onChange={e => {
+                  const ids = e.target.value.split(',')
+                    .map(s => parseInt(s.trim()))
+                    .filter(n => !isNaN(n));
+                  setAgentsSelectionnes(ids);
+                }}
+              />
+              {agentsSelectionnes.length > 0 && (
+                <p className="text-xs text-amber-700 mt-1">
+                  {agentsSelectionnes.length} agent(s) sélectionné(s) : {agentsSelectionnes.join(', ')}
+                </p>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Actions */}
       <div className="flex flex-wrap gap-3">
         {campagne.statut === 'brouillon' && (
           <Button loading={lancerMut.isPending} onClick={() => setConfirmLancer(true)}>
-            🚀 Lancer le provisionnement
+            {modeTest && agentsSelectionnes.length > 0
+              ? `🧪 Tester avec ${agentsSelectionnes.length} agent(s)`
+              : '🚀 Lancer le provisionnement'}
           </Button>
         )}
         {campagne.agents_echec > 0 && !isLive && (

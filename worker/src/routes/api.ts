@@ -449,15 +449,37 @@ campagnesRouter.post('/:id/lancer', async c => {
   if (campagne.statut === 'en_cours') return c.json({ error: 'Campagne déjà en cours' }, 409);
   if (campagne.statut === 'terminee') return c.json({ error: 'Campagne déjà terminée' }, 409);
 
-  const { results: agents } = await c.env.DB.prepare(
-    `SELECT * FROM agents WHERE actif = 1`
-  ).all<import('../types/index.js').Agent>();
+  // Optionnel : liste d'IDs d'agents pour un test ciblé
+  let body: { agent_ids?: number[] } = {};
+  try { body = await c.req.json(); } catch { /* pas de body = tous les agents */ }
 
-  if (agents.length === 0) return c.json({ error: 'Aucun agent actif trouvé' }, 400);
+  let agents: import('../types/index.js').Agent[];
+
+  if (body.agent_ids && body.agent_ids.length > 0) {
+    // Mode test : seulement les agents spécifiés
+    const placeholders = body.agent_ids.map(() => '?').join(',');
+    const { results } = await c.env.DB.prepare(
+      `SELECT * FROM agents WHERE id IN (${placeholders}) AND actif = 1`
+    ).bind(...body.agent_ids).all<import('../types/index.js').Agent>();
+    agents = results;
+  } else {
+    // Mode normal : tous les agents actifs
+    const { results } = await c.env.DB.prepare(
+      `SELECT * FROM agents WHERE actif = 1`
+    ).all<import('../types/index.js').Agent>();
+    agents = results;
+  }
+
+  if (agents.length === 0) return c.json({ error: 'Aucun agent trouvé' }, 400);
 
   c.executionCtx.waitUntil(lancerCampagne(c.env, campagne, agents));
 
-  return c.json({ ok: true, message: `Provisionnement lancé pour ${agents.length} agents` });
+  return c.json({
+    ok: true,
+    message: `Provisionnement lancé pour ${agents.length} agent(s)`,
+    mode: body.agent_ids ? 'test_ciblé' : 'tous_agents',
+    agents_count: agents.length,
+  });
 });
 
 // Supprimer une campagne — Super Admin uniquement
