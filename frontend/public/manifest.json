@@ -1,0 +1,24 @@
+{
+  "name": "Data Approvisionnement — Airtel CG",
+  "short_name": "Data Appro",
+  "description": "Gestion automatisée des approvisionnements data Airtel Money Congo Brazzaville",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#F9FAFB",
+  "theme_color": "#4F46E5",
+  "orientation": "any",
+  "lang": "fr",
+  "icons": [
+    { "src": "/icon-192.svg", "sizes": "192x192", "type": "image/svg+xml", "purpose": "any maskable" },
+    { "src": "/icon-512.svg", "sizes": "512x512", "type": "image/svg+xml", "purpose": "any maskable" },
+    { "src": "/favicon.svg",  "sizes": "any",     "type": "image/svg+xml", "purpose": "any" }
+  ],
+  "screenshots": [],
+  "categories": ["business", "productivity"],
+  "shortcuts": [
+    { "name": "Dashboard",   "url": "/",           "description": "Tableau de bord principal" },
+    { "name": "Agents",      "url": "/agents",     "description": "Gérer les agents" },
+    { "name": "Campagnes",   "url": "/campagnes",  "description": "Gérer les campagnes" },
+    { "name": "Historique",  "url": "/historique", "description": "Consulter l'historique" }
+  ]
+}
