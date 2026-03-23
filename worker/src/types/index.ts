@@ -1,7 +1,3 @@
-// ============================================================
-// Types — Bindings Cloudflare & modèles métier
-// ============================================================
-
 export interface Env {
   DB: D1Database;
   AIRTEL_CLIENT_ID: string;
@@ -24,8 +20,9 @@ export interface Agent {
   nom: string;
   prenom: string;
   telephone: string;
-  role: Role;
-  quota_gb: number;
+  role: Role;              // champ technique interne (pour les quotas par défaut)
+  role_label: string | null; // vrai métier de l'agent, libre et indépendant
+  quota_gb: number;        // assigné indépendamment du rôle
   forfait_label: string | null;
   prix_cfa: number;
   airtel_bundle_id: string | null;
@@ -34,11 +31,20 @@ export interface Agent {
   updated_at: string;
 }
 
+export interface RoleMetier {
+  id: number;
+  label: string;
+  description: string | null;
+  actif: number;
+  created_at: string;
+}
+
 export interface Responsable {
   id: number;
   agent_id: number;
   email: string;
   is_super_admin: number;
+  is_viewer: number;
   can_import_agents: number;
   can_launch_campagne: number;
   can_view_historique: number;
@@ -83,6 +89,7 @@ export interface Transaction {
   nb_tentatives: number;
 }
 
+// Quotas par défaut (fallback si quota_gb non défini manuellement)
 export const ROLE_QUOTAS: Record<Role, number> = {
   technicien: 6.5,
   responsable_junior: 14,
@@ -102,6 +109,7 @@ export interface JWTPayload {
   email: string;
   agent_id: number;
   is_super_admin: boolean;
+  is_viewer: boolean;
   iat: number;
   exp: number;
 }

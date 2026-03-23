@@ -6,6 +6,7 @@ import { useToast } from '../components/ui/Toast';
 import { LiveBanner } from '../components/ui/LiveBanner';
 import { ConfirmModal } from '../components/ui/ConfirmModal';
 import { useProvisionProgress } from '../hooks/useProvisionProgress';
+import { useAuth } from '../hooks/useAuth';
 import {
   Card, Button, CampagneBadge, TxBadge, RoleBadge,
   ProgressBar, Spinner, EmptyState,
@@ -17,6 +18,22 @@ import { fmtFCFA, fmtMois, fmtTelephone, fmtPct } from '../lib/utils';
 // ══════════════════════════════════════════════════════════
 
 export function CampagnesPage() {
+  const qc = useQueryClient();
+  const toast = useToast();
+  const { isSuperAdmin } = useAuth();
+  const [deleteCampagne, setDeleteCampagne] = useState<import('../types').Campagne | null>(null);
+
+  const deleteMut = useMutation({
+    mutationFn: (id: number) => campagnesApi.delete(id),
+    onSuccess: (res) => {
+      qc.invalidateQueries({ queryKey: ['campagnes'] });
+      qc.invalidateQueries({ queryKey: ['stats'] });
+      toast.success('Campagne supprimée', res.message);
+      setDeleteCampagne(null);
+    },
+    onError: (err: Error) => toast.error('Erreur suppression', err.message),
+  });
+
   const { data, isLoading } = useQuery({
     queryKey: ['campagnes'],
     queryFn: campagnesApi.list,
@@ -86,11 +103,40 @@ export function CampagnesPage() {
                     color={c.agents_echec > 0 ? 'amber' : 'green'}
                   />
                 )}
+                {isSuperAdmin && c.statut !== 'en_cours' && (
+                  <div className="mt-2 flex justify-end">
+                    <button
+                      onClick={e => { e.preventDefault(); setDeleteCampagne(c); }}
+                      className="text-red-500 hover:text-red-700 text-xs font-medium px-2 py-1 rounded hover:bg-red-50 transition-colors"
+                    >
+                      Supprimer
+                    </button>
+                  </div>
+                )}
               </Card>
             </Link>
           ))}
         </div>
       )}
+
+      {/* Confirm suppression campagne */}
+      <ConfirmModal
+        open={deleteCampagne !== null}
+        onClose={() => setDeleteCampagne(null)}
+        onConfirm={() => deleteCampagne && deleteMut.mutate(deleteCampagne.id)}
+        title="Supprimer la campagne"
+        confirmVariant="danger"
+        confirmLabel="Supprimer définitivement"
+        loading={deleteMut.isPending}
+        message={
+          <div className="space-y-2">
+            <p>Supprimer la campagne <strong className="capitalize">{deleteCampagne ? fmtMois(deleteCampagne.mois) : ''}</strong> ?</p>
+            <p className="text-red-600 text-xs bg-red-50 rounded-lg px-3 py-2">
+              ⚠️ Toutes les transactions associées seront également supprimées. Cette action est irréversible.
+            </p>
+          </div>
+        }
+      />
     </div>
   );
 }

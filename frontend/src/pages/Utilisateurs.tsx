@@ -30,6 +30,7 @@ export default function UtilisateursPage() {
   const [form, setForm] = useState({
     nom: '', prenom: '', telephone: '', email: '', password: '',
     role: 'manager' as Role,
+    is_viewer: false,
     can_import_agents: true, can_launch_campagne: true,
     can_view_historique: true, can_manage_users: false,
   });
@@ -153,6 +154,7 @@ export default function UtilisateursPage() {
                               {u.prenom} {u.nom}
                               {isMe && <span className="ml-2 text-xs bg-brand-100 text-brand-700 px-2 py-0.5 rounded-full">Vous</span>}
                               {u.is_super_admin && <span className="ml-2 text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full">Super Admin</span>}
+                              {u.is_viewer && <span className="ml-2 text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">Lecteur</span>}
                             </p>
                             <p className="text-xs text-gray-500">{u.email}</p>
                           </div>
@@ -245,18 +247,37 @@ export default function UtilisateursPage() {
             </div>
           </div>
           <div>
-            <label className="block text-xs font-medium text-gray-700 mb-2">Droits accordés</label>
-            <div className="space-y-2">
-              {Object.entries(DROITS_LABELS).map(([key, label]) => (
-                <label key={key} className="flex items-center gap-3 cursor-pointer">
-                  <input type="checkbox"
-                    checked={(form as unknown as Record<string, boolean>)[key] ?? false}
-                    onChange={e => setForm(f => ({ ...f, [key]: e.target.checked }))}
-                    className="w-4 h-4 text-brand-600 rounded"/>
-                  <span className="text-sm text-gray-700">{label}</span>
-                </label>
-              ))}
+            <label className="block text-xs font-medium text-gray-700 mb-2">Type d'accès</label>
+            <div className="grid grid-cols-2 gap-2 mb-3">
+              <button type="button" onClick={() => setForm(f => ({ ...f, is_viewer: false }))}
+                className={`p-3 rounded-xl border-2 text-left transition-all ${!form.is_viewer ? 'border-brand-500 bg-brand-50' : 'border-gray-200'}`}>
+                <p className={`text-xs font-semibold ${!form.is_viewer ? 'text-brand-700' : 'text-gray-700'}`}>Responsable</p>
+                <p className="text-xs text-gray-500 mt-0.5">Accès aux actions</p>
+              </button>
+              <button type="button" onClick={() => setForm(f => ({ ...f, is_viewer: true }))}
+                className={`p-3 rounded-xl border-2 text-left transition-all ${form.is_viewer ? 'border-gray-500 bg-gray-50' : 'border-gray-200'}`}>
+                <p className={`text-xs font-semibold ${form.is_viewer ? 'text-gray-700' : 'text-gray-700'}`}>Lecteur</p>
+                <p className="text-xs text-gray-500 mt-0.5">Consultation seule</p>
+              </button>
             </div>
+            {!form.is_viewer && (
+              <div className="space-y-2">
+                {Object.entries(DROITS_LABELS).map(([key, label]) => (
+                  <label key={key} className="flex items-center gap-3 cursor-pointer">
+                    <input type="checkbox"
+                      checked={(form as unknown as Record<string, boolean>)[key] ?? false}
+                      onChange={e => setForm(f => ({ ...f, [key]: e.target.checked }))}
+                      className="w-4 h-4 text-brand-600 rounded"/>
+                    <span className="text-sm text-gray-700">{label}</span>
+                  </label>
+                ))}
+              </div>
+            )}
+            {form.is_viewer && (
+              <p className="text-xs text-gray-500 bg-gray-50 rounded-lg px-3 py-2">
+                Le lecteur peut uniquement consulter les campagnes et filtrer les résultats. Aucune action possible.
+              </p>
+            )}
           </div>
           <div className="flex justify-end gap-3 pt-2">
             <Button variant="secondary" onClick={() => setCreateModal(false)}>Annuler</Button>
