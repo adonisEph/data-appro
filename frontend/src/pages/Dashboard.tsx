@@ -9,16 +9,20 @@ import { fr } from 'date-fns/locale';
 
 export default function DashboardPage() {
   const { user } = useAuth();
-  const { data, isLoading } = useQuery({
+
+  const { data, isLoading, dataUpdatedAt } = useQuery({
     queryKey: ['stats'],
     queryFn: historiqueApi.stats,
-    refetchInterval: 10_000,
+    refetchInterval: 10_000,        // rafraîchit toutes les 10s
+    refetchOnWindowFocus: true,     // rafraîchit quand on revient sur la page
+    staleTime: 0,
   });
 
-  const last = data?.last_campagne;
-  const txStats = data?.transactions_par_statut ?? [];
-  const confirmes = txStats.find(r => r.statut === 'confirme')?.n ?? 0;
-  const echecs    = txStats.find(r => r.statut === 'echec')?.n ?? 0;
+  const last        = data?.last_campagne;
+  const txStats     = data?.transactions_par_statut ?? [];
+  const confirmes   = txStats.find(r => r.statut === 'confirme')?.n ?? 0;
+  const echecs      = txStats.find(r => r.statut === 'echec')?.n ?? 0;
+  const lastUpdated = dataUpdatedAt ? new Date(dataUpdatedAt) : null;
 
   if (isLoading) return (
     <div className="flex items-center justify-center h-full min-h-[60vh]">
@@ -33,9 +37,17 @@ export default function DashboardPage() {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
           <h1 className="text-xl md:text-2xl font-bold text-gray-900">Dashboard</h1>
-          <p className="text-sm text-gray-500 mt-0.5">
-            Bonjour, {user?.prenom} — {format(new Date(), "EEEE d MMMM yyyy", { locale: fr })}
-          </p>
+          <div className="flex items-center gap-3 mt-0.5">
+            <p className="text-sm text-gray-500">
+              Bonjour, {user?.prenom} — {format(new Date(), "EEEE d MMMM yyyy", { locale: fr })}
+            </p>
+            {lastUpdated && (
+              <span className="text-xs text-gray-400 flex items-center gap-1">
+                <span className="w-1.5 h-1.5 bg-green-400 rounded-full animate-pulse"/>
+                Mis à jour à {format(lastUpdated, 'HH:mm:ss')}
+              </span>
+            )}
+          </div>
         </div>
         <Link to="/campagnes/nouvelle"
           className="inline-flex items-center gap-2 bg-brand-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-brand-700 transition-colors self-start sm:self-auto">
@@ -46,7 +58,7 @@ export default function DashboardPage() {
         </Link>
       </div>
 
-      {/* Stats grid — 2 colonnes sur mobile, 4 sur desktop */}
+      {/* Stats */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
         <StatCard label="Agents actifs" value={data?.total_agents ?? 0} sub="Dans le système" color="indigo"
           icon={<svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/></svg>}

@@ -37,6 +37,9 @@ export function CampagnesPage() {
   const { data, isLoading } = useQuery({
     queryKey: ['campagnes'],
     queryFn: campagnesApi.list,
+    refetchInterval: 15_000,
+    refetchOnWindowFocus: true,
+    staleTime: 0,
   });
 
   const campagnes = data?.campagnes ?? [];

@@ -14,7 +14,7 @@ export default function RolesMetierPage() {
   const [deleteRole, setDeleteRole]   = useState<RoleMetier | null>(null);
   const [form, setForm] = useState({ label: '', description: '' });
 
-  const { data, isLoading } = useQuery({ queryKey: ['roles-metier'], queryFn: rolesMetierApi.list });
+  const { data, isLoading } = useQuery({ queryKey: ['roles-metier'], queryFn: rolesMetierApi.list, refetchOnWindowFocus: true, staleTime: 0 });
 
   const createMut = useMutation({
     mutationFn: () => rolesMetierApi.create(form.label, form.description || undefined),

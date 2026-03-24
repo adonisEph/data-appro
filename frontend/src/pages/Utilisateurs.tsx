@@ -37,7 +37,7 @@ export default function UtilisateursPage() {
 
   const [droits, setDroits] = useState<Record<string, boolean>>({});
 
-  const { data, isLoading } = useQuery({ queryKey: ['users'], queryFn: usersApi.list });
+  const { data, isLoading } = useQuery({ queryKey: ['users'], queryFn: usersApi.list, refetchOnWindowFocus: true, staleTime: 0 });
 
   const createMut = useMutation({
     mutationFn: () => usersApi.create(form),
