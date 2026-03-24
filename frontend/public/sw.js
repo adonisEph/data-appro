@@ -1,5 +1,5 @@
 // Service Worker — Data Approvisionnement PWA
-const CACHE_NAME = 'data-appro-v1';
+const CACHE_NAME = 'data-appro-v2';
 const STATIC_ASSETS = ['/', '/index.html', '/manifest.json', '/favicon.svg'];
 
 self.addEventListener('install', event => {
@@ -7,6 +7,12 @@ self.addEventListener('install', event => {
     caches.open(CACHE_NAME).then(cache => cache.addAll(STATIC_ASSETS))
   );
   self.skipWaiting();
+});
+
+self.addEventListener('message', event => {
+  if (event.data && event.data.type === 'SKIP_WAITING') {
+    self.skipWaiting();
+  }
 });
 
 self.addEventListener('activate', event => {
@@ -27,19 +33,41 @@ self.addEventListener('fetch', event => {
     return;
   }
 
-  // Cache First pour les assets statiques
-  if (request.method === 'GET') {
+  if (request.method !== 'GET') return;
+
+  if (request.mode === 'navigate') {
+    event.respondWith(
+      fetch(request).then(response => {
+        if (response && response.ok) {
+          const clone = response.clone();
+          caches.open(CACHE_NAME).then(cache => cache.put('/index.html', clone));
+        }
+        return response;
+      }).catch(() => caches.match('/index.html'))
+    );
+    return;
+  }
+
+  const isAsset = url.pathname.startsWith('/assets/') || /\.(js|css|png|jpg|jpeg|svg|webp|ico|woff2?)$/i.test(url.pathname);
+
+  if (isAsset) {
     event.respondWith(
       caches.match(request).then(cached => {
-        if (cached) return cached;
-        return fetch(request).then(response => {
-          if (response.ok && response.type === 'basic') {
+        const network = fetch(request).then(response => {
+          if (response && response.ok) {
             const clone = response.clone();
             caches.open(CACHE_NAME).then(cache => cache.put(request, clone));
           }
           return response;
-        }).catch(() => caches.match('/index.html'));
+        }).catch(() => undefined);
+
+        return cached || network.then(r => r || caches.match(request));
       })
     );
+    return;
   }
+
+  event.respondWith(
+    caches.match(request).then(cached => cached || fetch(request))
+  );
 });
