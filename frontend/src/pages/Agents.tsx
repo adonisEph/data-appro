@@ -48,6 +48,8 @@ export default function AgentsPage() {
     staleTime: 60_000,
   });
   const rolesMetier = rolesData?.roles ?? [];
+  const activeRolesMetier = rolesMetier.filter(r => r.actif !== 0);
+  const inactiveLabels = new Set(rolesMetier.filter(r => r.actif === 0).map(r => r.label));
 
   const importMut = useMutation({
     mutationFn: (agents: AgentImportRow[]) => agentsApi.import(agents),
@@ -202,7 +204,7 @@ export default function AgentsPage() {
         <select value={filterRole} onChange={e => setFilterRole(e.target.value)}
           className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 sm:w-44">
           <option value="">Tous les postes</option>
-          {rolesMetier.map(r => <option key={r.id} value={r.label}>{r.label}</option>)}
+          {activeRolesMetier.map(r => <option key={r.id} value={r.label}>{r.label}</option>)}
           {ROLES.map(r => <option key={r} value={r}>{ROLE_INTERNAL_LABELS[r]}</option>)}
         </select>
       </div>
@@ -343,7 +345,10 @@ export default function AgentsPage() {
                 <select value={form.role_label ?? ''} onChange={e => setForm(f => ({ ...f, role_label: e.target.value }))}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
                   <option value="">-- Choisir un poste --</option>
-                  {rolesMetier.map(r => <option key={r.id} value={r.label}>{r.label}</option>)}
+                  {form.role_label && inactiveLabels.has(form.role_label) && (
+                    <option value={form.role_label}>{form.role_label} (désactivé)</option>
+                  )}
+                  {activeRolesMetier.map(r => <option key={r.id} value={r.label}>{r.label}</option>)}
                 </select>
               ) : (
                 <input type="text" value={form.role_label ?? ''} onChange={e => setForm(f => ({ ...f, role_label: e.target.value }))}

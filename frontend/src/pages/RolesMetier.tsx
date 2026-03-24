@@ -12,6 +12,7 @@ export default function RolesMetierPage() {
   const [createModal, setCreateModal] = useState(false);
   const [editRole, setEditRole]       = useState<RoleMetier | null>(null);
   const [deleteRole, setDeleteRole]   = useState<RoleMetier | null>(null);
+  const [reactivateRole, setReactivateRole] = useState<RoleMetier | null>(null);
   const [form, setForm] = useState({ label: '', description: '' });
 
   const { data, isLoading } = useQuery({ queryKey: ['roles-metier'], queryFn: rolesMetierApi.list, refetchOnWindowFocus: true, staleTime: 0 });
@@ -40,6 +41,15 @@ export default function RolesMetierPage() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['roles-metier'] });
       toast.success('Rôle désactivé'); setDeleteRole(null);
+    },
+    onError: (err: Error) => toast.error('Erreur', err.message),
+  });
+
+  const reactivateMut = useMutation({
+    mutationFn: (id: number) => rolesMetierApi.update(id, { actif: 1 }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['roles-metier'] });
+      toast.success('Rôle réactivé'); setReactivateRole(null);
     },
     onError: (err: Error) => toast.error('Erreur', err.message),
   });
@@ -78,7 +88,12 @@ export default function RolesMetierPage() {
             {roles.map(role => (
               <div key={role.id} className="flex items-center justify-between px-4 py-3 hover:bg-gray-50">
                 <div>
-                  <p className="font-semibold text-gray-900 text-sm">{role.label}</p>
+                  <div className="flex items-center gap-2">
+                    <p className="font-semibold text-gray-900 text-sm">{role.label}</p>
+                    {role.actif === 0 && (
+                      <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-gray-100 text-gray-500">Désactivé</span>
+                    )}
+                  </div>
                   {role.description && <p className="text-xs text-gray-500 mt-0.5">{role.description}</p>}
                 </div>
                 <div className="flex gap-2 shrink-0">
@@ -86,10 +101,17 @@ export default function RolesMetierPage() {
                     className="text-brand-600 hover:text-brand-800 text-xs font-medium px-2 py-1 rounded hover:bg-brand-50">
                     Modifier
                   </button>
-                  <button onClick={() => setDeleteRole(role)}
-                    className="text-red-500 hover:text-red-700 text-xs font-medium px-2 py-1 rounded hover:bg-red-50">
-                    Supprimer
-                  </button>
+                  {role.actif === 0 ? (
+                    <button onClick={() => setReactivateRole(role)}
+                      className="text-emerald-600 hover:text-emerald-800 text-xs font-medium px-2 py-1 rounded hover:bg-emerald-50">
+                      Réactiver
+                    </button>
+                  ) : (
+                    <button onClick={() => setDeleteRole(role)}
+                      className="text-red-500 hover:text-red-700 text-xs font-medium px-2 py-1 rounded hover:bg-red-50">
+                      Désactiver
+                    </button>
+                  )}
                 </div>
               </div>
             ))}
@@ -152,8 +174,15 @@ export default function RolesMetierPage() {
       {/* Confirm Suppression */}
       <ConfirmModal open={deleteRole !== null} onClose={() => setDeleteRole(null)}
         onConfirm={() => deleteRole && deleteMut.mutate(deleteRole.id)}
-        title="Supprimer le rôle" confirmVariant="danger" confirmLabel="Supprimer" loading={deleteMut.isPending}
+        title="Désactiver le rôle" confirmVariant="danger" confirmLabel="Désactiver" loading={deleteMut.isPending}
         message={`Désactiver le rôle "${deleteRole?.label}" ? Les agents ayant ce poste ne seront pas affectés.`}
+      />
+
+      {/* Confirm Réactivation */}
+      <ConfirmModal open={reactivateRole !== null} onClose={() => setReactivateRole(null)}
+        onConfirm={() => reactivateRole && reactivateMut.mutate(reactivateRole.id)}
+        title="Réactiver le rôle" confirmVariant="primary" confirmLabel="Réactiver" loading={reactivateMut.isPending}
+        message={`Réactiver le rôle "${reactivateRole?.label}" ? Il redeviendra sélectionnable pour les agents.`}
       />
     </div>
   );
