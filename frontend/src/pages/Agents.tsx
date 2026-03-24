@@ -2,6 +2,7 @@ import { useState, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { agentsApi, rolesMetierApi } from '../lib/api';
 import { parseExcelFile, type AgentImportRow } from '../lib/excel';
+import * as XLSX from 'xlsx';
 import { useToast } from '../components/ui/Toast';
 import { ConfirmModal } from '../components/ui/ConfirmModal';
 import { Card, Button, Modal, Spinner, EmptyState } from '../components/ui';
@@ -104,6 +105,28 @@ export default function AgentsPage() {
     return matchSearch && matchRole;
   });
 
+  const exportExcel = () => {
+    const rows = filtered.map(a => ({
+      ID: a.id,
+      Prenom: a.prenom,
+      Nom: a.nom,
+      Telephone: a.telephone,
+      Poste: a.role_label ?? ROLE_INTERNAL_LABELS[a.role],
+      Quota_GB: a.quota_gb,
+      Prix_CFA: a.prix_cfa,
+      Forfait: a.forfait_label ?? '',
+    }));
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.json_to_sheet(rows);
+    XLSX.utils.book_append_sheet(wb, ws, 'Agents');
+
+    const date = new Date();
+    const y = date.getFullYear();
+    const m = String(date.getMonth() + 1).padStart(2, '0');
+    const d = String(date.getDate()).padStart(2, '0');
+    XLSX.writeFile(wb, `agents_${y}-${m}-${d}.xlsx`);
+  };
+
   // Compteurs par quota
   const quotaGroups = agents.reduce((acc, a) => {
     const key = `${a.quota_gb}GB`;
@@ -131,13 +154,19 @@ export default function AgentsPage() {
             )}
           </div>
         </div>
-        <Button variant="secondary" size="sm" onClick={() => fileRef.current?.click()}>
-          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3 3m0 0l3-3m-3 3V10"/>
-          </svg>
-          <span className="hidden sm:inline">Importer Excel</span>
-          <span className="sm:hidden">Import</span>
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="secondary" size="sm" onClick={exportExcel} disabled={filtered.length === 0}>
+            <span className="hidden sm:inline">Exporter Excel</span>
+            <span className="sm:hidden">Export</span>
+          </Button>
+          <Button variant="secondary" size="sm" onClick={() => fileRef.current?.click()}>
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3 3m0 0l3-3m-3 3V10"/>
+            </svg>
+            <span className="hidden sm:inline">Importer Excel</span>
+            <span className="sm:hidden">Import</span>
+          </Button>
+        </div>
       </div>
 
       {/* Info workflow rôle/quota */}

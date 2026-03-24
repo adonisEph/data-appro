@@ -79,7 +79,7 @@ rolesRouter.use('*', authMiddleware);
 
 rolesRouter.get('/', async c => {
   const { results } = await c.env.DB.prepare(
-    `SELECT * FROM roles_metier WHERE actif = 1 ORDER BY label`
+    `SELECT * FROM roles_metier WHERE COALESCE(actif, 1) = 1 ORDER BY label`
   ).all();
   return c.json({ roles: results });
 });
