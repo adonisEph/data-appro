@@ -5,9 +5,9 @@ import { useToast } from '../components/ui/Toast';
 import { ConfirmModal } from '../components/ui/ConfirmModal';
 import { Card, Button, RoleBadge, Modal, Spinner, EmptyState } from '../components/ui';
 import { useAuth } from '../hooks/useAuth';
-import type { Responsable, Role } from '../types';
-import { ROLE_LABELS, ROLE_QUOTAS } from '../types';
+import type { Responsable } from '../types';
 import { fmtDateTime } from '../lib/utils';
+import { rolesMetierApi } from '../lib/api';
 
 const DROITS_LABELS = {
   can_import_agents:   'Importer des agents',
@@ -29,7 +29,10 @@ export default function UtilisateursPage() {
 
   const [form, setForm] = useState({
     nom: '', prenom: '', telephone: '', email: '', password: '',
-    role: 'manager' as Role,
+    role_label: '',
+    quota_gb: 0,
+    prix_cfa: 0,
+    forfait_label: '',
     is_viewer: false,
     can_import_agents: true, can_launch_campagne: true,
     can_view_historique: true, can_manage_users: false,
@@ -39,14 +42,23 @@ export default function UtilisateursPage() {
 
   const { data, isLoading } = useQuery({ queryKey: ['users'], queryFn: usersApi.list, refetchOnWindowFocus: true, staleTime: 0 });
 
+  const { data: rolesData } = useQuery({
+    queryKey: ['roles-metier'],
+    queryFn: rolesMetierApi.list,
+    staleTime: 60_000,
+  });
+  const rolesMetier = rolesData?.roles ?? [];
+  const activeRolesMetier = rolesMetier.filter(r => r.actif !== 0);
+  const inactiveLabels = new Set(rolesMetier.filter(r => r.actif === 0).map(r => r.label));
+
   const createMut = useMutation({
     mutationFn: () => usersApi.create(form),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['users'] });
       toast.success('Utilisateur créé', form.email);
       setCreateModal(false);
-      setForm({ nom: '', prenom: '', telephone: '', email: '', password: '', role: 'manager',
-        can_import_agents: true, can_launch_campagne: true, can_view_historique: true, can_manage_users: false });
+      setForm({ nom: '', prenom: '', telephone: '', email: '', password: '', role_label: '', quota_gb: 0, prix_cfa: 0, forfait_label: '',
+        can_import_agents: true, can_launch_campagne: true, can_view_historique: true, can_manage_users: false, is_viewer: false });
     },
     onError: (err: Error) => toast.error('Erreur', err.message),
   });
@@ -131,7 +143,7 @@ export default function UtilisateursPage() {
               <thead>
                 <tr className="border-b border-gray-100">
                   <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Utilisateur</th>
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Rôle agent</th>
+                  <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Poste</th>
                   <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Droits</th>
                   <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Statut</th>
                   <th className="text-right px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Actions</th>
@@ -160,7 +172,13 @@ export default function UtilisateursPage() {
                           </div>
                         </div>
                       </td>
-                      <td className="px-4 py-3">{u.role && <RoleBadge role={u.role}/>}</td>
+                      <td className="px-4 py-3">
+                        {u.role_label ? (
+                          <span className="text-xs bg-gray-100 text-gray-700 px-2 py-0.5 rounded-full">{u.role_label}</span>
+                        ) : (
+                          u.role && <RoleBadge role={u.role}/>
+                        )}
+                      </td>
                       <td className="px-4 py-3">
                         <div className="flex flex-wrap gap-1">
                           {Object.entries(DROITS_LABELS).map(([key, label]) => (
@@ -239,12 +257,46 @@ export default function UtilisateursPage() {
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"/>
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">Rôle agent</label>
-              <select value={form.role} onChange={e => setForm(f => ({ ...f, role: e.target.value as Role }))}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
-                {Object.entries(ROLE_LABELS).map(([r, l]) => <option key={r} value={r}>{l} — {ROLE_QUOTAS[r as Role]}GB</option>)}
-              </select>
+              <label className="block text-xs font-medium text-gray-700 mb-1">Poste dans l'entreprise</label>
+              {rolesMetier.length > 0 ? (
+                <select value={form.role_label} onChange={e => setForm(f => ({ ...f, role_label: e.target.value }))}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+                  <option value="">-- Choisir un poste --</option>
+                  {form.role_label && inactiveLabels.has(form.role_label) && (
+                    <option value={form.role_label}>{form.role_label} (désactivé)</option>
+                  )}
+                  {activeRolesMetier.map(r => <option key={r.id} value={r.label}>{r.label}</option>)}
+                </select>
+              ) : (
+                <input type="text" value={form.role_label} onChange={e => setForm(f => ({ ...f, role_label: e.target.value }))}
+                  placeholder="Ex: Ingénieur, Comptable…"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"/>
+              )}
             </div>
+          </div>
+
+          <div className="bg-blue-50 border border-blue-200 rounded-xl px-4 py-3 text-xs text-blue-800">
+            <strong>Rôle métier ≠ Quota data.</strong> Le poste est indépendant du quota (GB) et du prix CFA.
+            Vous pouvez assigner n'importe quel quota à n'importe quel poste.
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">Quota (GB)</label>
+              <input type="number" step="0.5" value={form.quota_gb} onChange={e => setForm(f => ({ ...f, quota_gb: Number(e.target.value) }))}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"/>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">Prix CFA</label>
+              <input type="number" value={form.prix_cfa} onChange={e => setForm(f => ({ ...f, prix_cfa: Number(e.target.value) }))}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"/>
+            </div>
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-700 mb-1">Label forfait (optionnel)</label>
+            <input type="text" value={form.forfait_label} onChange={e => setForm(f => ({ ...f, forfait_label: e.target.value }))}
+              placeholder="ex: 6.5GB, 14GB…"
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"/>
           </div>
           <div>
             <label className="block text-xs font-medium text-gray-700 mb-2">Type d'accès</label>

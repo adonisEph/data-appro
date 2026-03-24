@@ -239,6 +239,7 @@ usersRouter.post('/', async c => {
   const body = await c.req.json<{
     nom: string; prenom: string; telephone: string; email: string; password: string;
     role?: Role; role_label?: string; is_viewer?: boolean;
+    quota_gb?: number; prix_cfa?: number; forfait_label?: string;
     can_import_agents?: boolean; can_launch_campagne?: boolean;
     can_view_historique?: boolean; can_manage_users?: boolean;
   }>();
@@ -250,12 +251,42 @@ usersRouter.post('/', async c => {
   const existing = await c.env.DB.prepare(`SELECT id FROM agents WHERE telephone = ?`).bind(telephone).first<{ id: number }>();
   if (existing) {
     agentId = existing.id;
+
+    // Mettre à jour les infos agent si elles sont fournies
+    await c.env.DB.prepare(
+      `UPDATE agents
+       SET nom = ?, prenom = ?,
+           role_label = COALESCE(?, role_label),
+           quota_gb = COALESCE(?, quota_gb),
+           prix_cfa = COALESCE(?, prix_cfa),
+           forfait_label = COALESCE(?, forfait_label)
+       WHERE id = ?`
+    ).bind(
+      nom,
+      prenom || '',
+      body.role_label ? body.role_label : null,
+      body.quota_gb !== undefined ? body.quota_gb : null,
+      body.prix_cfa !== undefined ? body.prix_cfa : null,
+      body.forfait_label ? body.forfait_label : null,
+      agentId
+    ).run();
   } else {
     const role: Role = body.role ?? 'manager';
+    const quota = body.quota_gb !== undefined ? body.quota_gb : ROLE_QUOTAS[role];
+    const prix = body.prix_cfa !== undefined ? body.prix_cfa : 0;
     const inserted = await c.env.DB.prepare(
-      `INSERT INTO agents (nom, prenom, telephone, role, role_label, quota_gb)
-       VALUES (?, ?, ?, ?, ?, ?) RETURNING id`
-    ).bind(nom, prenom || '', telephone, role, body.role_label ?? null, ROLE_QUOTAS[role])
+      `INSERT INTO agents (nom, prenom, telephone, role, role_label, quota_gb, prix_cfa, forfait_label)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`
+    ).bind(
+      nom,
+      prenom || '',
+      telephone,
+      role,
+      body.role_label ?? null,
+      quota,
+      prix,
+      body.forfait_label ?? null
+    )
      .first<{ id: number }>();
     if (!inserted) return c.json({ error: 'Erreur création agent' }, 500);
     agentId = inserted.id;

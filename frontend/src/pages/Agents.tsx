@@ -113,7 +113,6 @@ export default function AgentsPage() {
       Prenom: a.prenom,
       Nom: a.nom,
       Telephone: a.telephone,
-      Poste: a.role_label ?? ROLE_INTERNAL_LABELS[a.role],
       Quota_GB: a.quota_gb,
       Prix_CFA: a.prix_cfa,
       Forfait: a.forfait_label ?? '',
@@ -224,7 +223,6 @@ export default function AgentsPage() {
                   <tr className="border-b border-gray-100">
                     <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Agent</th>
                     <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Téléphone</th>
-                    <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Poste métier</th>
                     <th className="text-right px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Quota data</th>
                     <th className="text-right px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Prix CFA</th>
                     <th className="text-right px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Actions</th>
@@ -242,11 +240,6 @@ export default function AgentsPage() {
                         </div>
                       </td>
                       <td className="px-4 py-3 font-mono text-xs text-gray-600">{fmtTelephone(agent.telephone)}</td>
-                      <td className="px-4 py-3">
-                        <span className="text-xs bg-gray-100 text-gray-700 px-2 py-0.5 rounded-full">
-                          {agent.role_label ?? ROLE_INTERNAL_LABELS[agent.role]}
-                        </span>
-                      </td>
                       <td className="px-4 py-3 text-right font-bold text-indigo-700">{agent.quota_gb} GB</td>
                       <td className="px-4 py-3 text-right text-gray-700">
                         {agent.prix_cfa > 0 ? agent.prix_cfa.toLocaleString('fr-FR') + ' F' : '—'}
@@ -289,9 +282,6 @@ export default function AgentsPage() {
                       <p className="text-xs text-gray-500 font-mono">{fmtTelephone(agent.telephone)}</p>
                     </div>
                   </div>
-                  <span className="text-xs bg-gray-100 text-gray-700 px-2 py-0.5 rounded-full shrink-0">
-                    {agent.role_label ?? ROLE_INTERNAL_LABELS[agent.role]}
-                  </span>
                 </div>
                 <div className="flex items-center justify-between pt-2 border-t border-gray-100">
                   <div className="flex gap-3 text-xs">
