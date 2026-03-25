@@ -100,3 +100,19 @@ export const historiqueApi = {
   preuve: (txId: number) =>
     request<{ preuve: Transaction & { mois: string; budget_fcfa: number } }>(`/historique/transactions/${txId}/preuve`),
 };
+
+// Events (audit logs)
+export const eventsApi = {
+  list: (params: { since_id?: number; limit?: number }) => {
+    const qs = new URLSearchParams(
+      Object.fromEntries(
+        Object.entries(params)
+          .filter(([, v]) => v !== undefined && v !== null)
+          .map(([k, v]) => [k, String(v)])
+      )
+    ).toString();
+    return request<{ events: Array<{ id: number; campagne_id?: number | null; agent_id?: number | null; responsable_id?: number | null; action: string; details?: string | null; created_at: string }>; next_since_id: number }>(
+      `/events${qs ? '?' + qs : ''}`
+    );
+  },
+};

@@ -65,7 +65,9 @@ async function importRsaPublicKey(): Promise<CryptoKey> {
 
 // ── Chiffrer avec RSA-OAEP (PIN et AES key) ──────────────────
 async function rsaEncrypt(rsaKey: CryptoKey, data: Uint8Array): Promise<string> {
-  const encrypted = await crypto.subtle.encrypt({ name: 'RSA-OAEP' }, rsaKey, data);
+  const ab = new ArrayBuffer(data.byteLength);
+  new Uint8Array(ab).set(data);
+  const encrypted = await crypto.subtle.encrypt({ name: 'RSA-OAEP' }, rsaKey, ab);
   return btoa(String.fromCharCode(...new Uint8Array(encrypted)));
 }
 

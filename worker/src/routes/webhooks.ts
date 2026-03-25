@@ -127,8 +127,15 @@ async function verifyWebhookSignature(
       { name: 'HMAC', hash: 'SHA-256' }, false, ['verify']
     );
     const sigBytes = hexToBytes(signature);
+
+    const sigAb = new ArrayBuffer(sigBytes.byteLength);
+    new Uint8Array(sigAb).set(sigBytes);
+
     const valid = await crypto.subtle.verify(
-      'HMAC', key, sigBytes, encoder.encode(payload)
+      'HMAC',
+      key,
+      sigAb,
+      encoder.encode(payload)
     );
     return valid;
   } catch {

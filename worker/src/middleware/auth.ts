@@ -1,7 +1,9 @@
 import type { Context, Next } from 'hono';
 import type { Env, JWTPayload } from '../types/index.js';
 
-export async function authMiddleware(c: Context<{ Bindings: Env }>, next: Next) {
+type AppContext = Context<{ Bindings: Env; Variables: { user: JWTPayload } }>;
+
+export async function authMiddleware(c: AppContext, next: Next) {
   const auth = c.req.header('Authorization');
   if (!auth?.startsWith('Bearer ')) return c.json({ error: 'Non autorisé — token manquant' }, 401);
 
@@ -24,24 +26,24 @@ export async function authMiddleware(c: Context<{ Bindings: Env }>, next: Next) 
     if (decoded.exp < Math.floor(Date.now() / 1000)) return c.json({ error: 'Token expiré' }, 401);
 
     c.set('user', decoded);
-    await next();
+    return await next();
   } catch {
     return c.json({ error: 'Token invalide' }, 401);
   }
 }
 
 // Super Admin uniquement
-export async function superAdminMiddleware(c: Context<{ Bindings: Env }>, next: Next) {
+export async function superAdminMiddleware(c: AppContext, next: Next) {
   const user = c.get('user') as JWTPayload;
   if (!user?.is_super_admin) return c.json({ error: 'Accès refusé — droits super admin requis' }, 403);
-  await next();
+  return await next();
 }
 
 // Bloquer les lecteurs (viewer) sur les routes d'écriture
-export async function noViewerMiddleware(c: Context<{ Bindings: Env }>, next: Next) {
+export async function noViewerMiddleware(c: AppContext, next: Next) {
   const user = c.get('user') as JWTPayload;
   if (user?.is_viewer) return c.json({ error: 'Accès refusé — lecture seule' }, 403);
-  await next();
+  return await next();
 }
 
 export async function generateJWT(secret: string, payload: Omit<JWTPayload, 'iat' | 'exp'>): Promise<string> {

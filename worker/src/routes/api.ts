@@ -273,6 +273,8 @@ agentsRouter.put('/:id', noViewerMiddleware, async c => {
     prix_cfa?: number; forfait_label?: string; actif?: number;
   }>();
 
+  const before = await c.env.DB.prepare(`SELECT quota_gb FROM agents WHERE id = ?`).bind(id).first<{ quota_gb: number }>();
+
   const updates: string[] = []; const values: unknown[] = [];
   if (body.nom           !== undefined) { updates.push('nom = ?');           values.push(body.nom); }
   if (body.prenom        !== undefined) { updates.push('prenom = ?');         values.push(body.prenom); }
@@ -289,6 +291,21 @@ agentsRouter.put('/:id', noViewerMiddleware, async c => {
 
   await c.env.DB.prepare(`UPDATE agents SET ${updates.join(', ')} WHERE id = ?`).bind(...values).run();
   const updated = await c.env.DB.prepare(`SELECT * FROM agents WHERE id = ?`).bind(id).first();
+
+  const user = c.get('user');
+  const beforeQuota = before?.quota_gb;
+  const afterQuota = (updated as { quota_gb?: number } | null)?.quota_gb;
+  const quotaChanged = beforeQuota !== undefined && afterQuota !== undefined && beforeQuota !== afterQuota;
+
+  await c.env.DB.prepare(
+    `INSERT INTO audit_logs (agent_id, responsable_id, action, details) VALUES (?, ?, ?, ?)`
+  ).bind(
+    id,
+    Number((user as JWTPayload).sub),
+    quotaChanged ? 'AGENT_QUOTA_CHANGED' : 'AGENT_UPDATED',
+    JSON.stringify({ updates: body, before: { quota_gb: beforeQuota }, after: { quota_gb: afterQuota } })
+  ).run();
+
   return c.json({ ok: true, agent: updated });
 });
 
@@ -303,6 +320,37 @@ agentsRouter.delete('/:id', superAdminMiddleware, async c => {
 });
 
 api.route('/agents', agentsRouter);
+
+// ══════════════════════════════════════════════════════════
+// EVENTS (audit_logs) — temps réel via polling
+// ══════════════════════════════════════════════════════════
+const eventsRouter = new Hono<AppEnv>();
+eventsRouter.use('*', authMiddleware);
+
+eventsRouter.get('/', async c => {
+  const sinceIdRaw = c.req.query('since_id');
+  const limitRaw = c.req.query('limit');
+
+  const sinceId = sinceIdRaw ? Number(sinceIdRaw) : 0;
+  const limit = Math.min(200, Math.max(1, limitRaw ? Number(limitRaw) : 50));
+
+  const { results } = await c.env.DB.prepare(
+    `SELECT id, campagne_id, agent_id, responsable_id, action, details, created_at
+     FROM audit_logs
+     WHERE id > ?
+     ORDER BY id ASC
+     LIMIT ?`
+  ).bind(Number.isFinite(sinceId) ? sinceId : 0, Number.isFinite(limit) ? limit : 50).all();
+
+  const events = results ?? [];
+  const next_since_id = events.length > 0
+    ? (events[events.length - 1] as { id: number }).id
+    : (Number.isFinite(sinceId) ? sinceId : 0);
+
+  return c.json({ events, next_since_id });
+});
+
+api.route('/events', eventsRouter);
 
 // ══════════════════════════════════════════════════════════
 // UTILISATEURS — Super Admin
@@ -478,6 +526,16 @@ campagnesRouter.post('/', noViewerMiddleware, async c => {
   if (mode === 'manuel' && result?.id) {
     await c.env.DB.prepare(`UPDATE campagnes SET mode = 'manuel' WHERE id = ?`).bind(result.id).run();
   }
+
+  if (result?.id) {
+    await c.env.DB.prepare(`INSERT INTO audit_logs (campagne_id, responsable_id, action, details) VALUES (?, ?, ?, ?)`).bind(
+      result.id,
+      Number(user.sub),
+      'CAMPAGNE_CREATED',
+      JSON.stringify({ mois, budget_fcfa, compte_source, option_envoi: option_envoi ?? 'argent', mode: mode ?? 'auto' })
+    ).run();
+  }
+
   return c.json({ ok: true, campagne_id: result?.id });
 });
 
