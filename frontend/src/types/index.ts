@@ -2,6 +2,7 @@ export type Role = 'technicien' | 'responsable_junior' | 'responsable_senior' | 
 export type StatutCampagne = 'brouillon' | 'en_cours' | 'terminee' | 'partielle' | 'annulee';
 export type StatutTransaction = 'en_attente' | 'envoye' | 'confirme' | 'echec' | 'double_detected';
 export type OptionEnvoi = 'argent';
+export type ModeCampagne = 'auto' | 'manuel';
 
 // Rôle technique interne (détermine les quotas par défaut)
 export const ROLE_LABELS: Record<Role, string> = {
@@ -53,7 +54,7 @@ export interface Responsable {
 export interface Campagne {
   id: number; mois: string; budget_fcfa: number; compte_source: string;
   responsable_id: number; responsable_email?: string; responsable_nom?: string;
-  statut: StatutCampagne; option_envoi: OptionEnvoi;
+  statut: StatutCampagne; option_envoi: OptionEnvoi; mode?: ModeCampagne;
   total_agents: number; agents_ok: number; agents_echec: number;
   lance_le: string | null; termine_le: string | null; created_at: string;
 }
@@ -61,11 +62,12 @@ export interface Campagne {
 export interface Transaction {
   id: number; campagne_id: number; agent_id: number;
   nom?: string; prenom?: string; role?: Role; role_label?: string;
-  telephone: string; montant_fcfa: number | null; option_used: 'argent';
+  telephone: string; montant_fcfa: number | null; option_used: 'argent' | 'forfait';
   statut: StatutTransaction; airtel_transaction_id: string | null;
   airtel_reference: string | null; airtel_status: string | null;
   airtel_message: string | null; airtel_raw_response: string | null;
-  accuse_recu_le: string | null; tente_le: string; confirme_le: string | null; nb_tentatives: number;
+  accuse_recu_le: string | null; accuse_raw: string | null;
+  tente_le: string; confirme_le: string | null; nb_tentatives: number;
 }
 
 export interface DashboardStats {

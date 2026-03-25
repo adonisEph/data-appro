@@ -14,6 +14,7 @@ export type Role = 'technicien' | 'responsable_junior' | 'responsable_senior' | 
 export type StatutCampagne = 'brouillon' | 'en_cours' | 'terminee' | 'partielle' | 'annulee';
 export type StatutTransaction = 'en_attente' | 'envoye' | 'confirme' | 'echec' | 'double_detected';
 export type OptionEnvoi = 'argent';
+export type ModeCampagne = 'auto' | 'manuel';
 
 export interface Agent {
   id: number;
@@ -61,6 +62,7 @@ export interface Campagne {
   responsable_id: number;
   statut: StatutCampagne;
   option_envoi: OptionEnvoi;
+  mode: ModeCampagne;
   total_agents: number;
   agents_ok: number;
   agents_echec: number;
@@ -75,7 +77,7 @@ export interface Transaction {
   agent_id: number;
   telephone: string;
   montant_fcfa: number | null;
-  option_used: 'argent';
+  option_used: 'argent' | 'forfait';
   statut: StatutTransaction;
   airtel_transaction_id: string | null;
   airtel_reference: string | null;

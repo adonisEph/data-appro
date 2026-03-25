@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import type { Env, Role, JWTPayload } from '../types/index.js';
-import { ROLE_QUOTAS } from '../types/index.js';
+import { MONTANTS_FCFA, ROLE_QUOTAS } from '../types/index.js';
 import { authMiddleware, superAdminMiddleware, noViewerMiddleware, generateJWT } from '../middleware/auth.js';
 import { lancerCampagne } from '../services/provisionnement.js';
 
@@ -380,14 +380,18 @@ campagnesRouter.get('/', async c => {
 
 campagnesRouter.post('/', noViewerMiddleware, async c => {
   const user = c.get('user');
-  const { mois, budget_fcfa, compte_source, option_envoi } = await c.req.json<{
-    mois: string; budget_fcfa: number; compte_source: string; option_envoi: string;
+  const { mois, budget_fcfa, compte_source, option_envoi, mode } = await c.req.json<{
+    mois: string; budget_fcfa: number; compte_source: string; option_envoi: string; mode?: string;
   }>();
   if (!mois || !budget_fcfa || !compte_source) return c.json({ error: 'mois, budget_fcfa, compte_source requis' }, 400);
   const result = await c.env.DB.prepare(
     `INSERT INTO campagnes (mois, budget_fcfa, compte_source, responsable_id, option_envoi)
      VALUES (?, ?, ?, ?, ?) RETURNING id`
   ).bind(mois, budget_fcfa, compte_source, Number(user.sub), option_envoi ?? 'argent').first<{ id: number }>();
+
+  if (mode === 'manuel' && result?.id) {
+    await c.env.DB.prepare(`UPDATE campagnes SET mode = 'manuel' WHERE id = ?`).bind(result.id).run();
+  }
   return c.json({ ok: true, campagne_id: result?.id });
 });
 
@@ -408,6 +412,9 @@ campagnesRouter.post('/:id/lancer', noViewerMiddleware, async c => {
   const campagne = await c.env.DB.prepare(`SELECT * FROM campagnes WHERE id = ?`)
     .bind(id).first<import('../types/index.js').Campagne>();
   if (!campagne) return c.json({ error: 'Campagne introuvable' }, 404);
+  if ((campagne as unknown as { mode?: string }).mode === 'manuel') {
+    return c.json({ error: 'Campagne en mode manuel : le lancement automatique est désactivé' }, 409);
+  }
   if (campagne.statut === 'en_cours') return c.json({ error: 'Déjà en cours' }, 409);
   if (campagne.statut === 'terminee') return c.json({ error: 'Déjà terminée' }, 409);
 
@@ -429,6 +436,133 @@ campagnesRouter.post('/:id/lancer', noViewerMiddleware, async c => {
   if (agents.length === 0) return c.json({ error: 'Aucun agent trouvé' }, 400);
   c.executionCtx.waitUntil(lancerCampagne(c.env, campagne, agents));
   return c.json({ ok: true, message: `Provisionnement lancé pour ${agents.length} agent(s)`, mode: body.agent_ids ? 'test_ciblé' : 'tous_agents' });
+});
+
+campagnesRouter.post('/:id/manual/validate', noViewerMiddleware, async c => {
+  const campagneId = Number(c.req.param('id'));
+  const user = c.get('user');
+  const body = await c.req.json<{
+    agent_id: number;
+    action: 'argent' | 'forfait';
+    statut: 'confirme' | 'echec';
+    sms: string;
+    montant_fcfa?: number;
+  }>();
+
+  if (!body.agent_id || !body.action || !body.statut || !body.sms) {
+    return c.json({ error: 'agent_id, action, statut, sms requis' }, 400);
+  }
+
+  const campagne = await c.env.DB.prepare(`SELECT * FROM campagnes WHERE id = ?`).bind(campagneId).first<Record<string, unknown>>();
+  if (!campagne) return c.json({ error: 'Campagne introuvable' }, 404);
+  if (campagne['mode'] !== 'manuel') return c.json({ error: 'Campagne non-manuel' }, 409);
+
+  const agent = await c.env.DB.prepare(`SELECT * FROM agents WHERE id = ? AND actif = 1`).bind(body.agent_id).first<import('../types/index.js').Agent>();
+  if (!agent) return c.json({ error: 'Agent introuvable' }, 404);
+
+  // Calcul montant : priorité au montant fourni, sinon prix agent, sinon fallback rôle
+  const montant = body.montant_fcfa !== undefined
+    ? body.montant_fcfa
+    : (agent.prix_cfa > 0 ? agent.prix_cfa : (MONTANTS_FCFA[agent.role] ?? 0));
+
+  // Si total_agents n'est pas initialisé sur une campagne manuelle, le fixer au nombre d'agents actifs
+  if ((campagne['total_agents'] as number | undefined) === 0) {
+    const total = await c.env.DB.prepare(`SELECT COUNT(*) as n FROM agents WHERE actif = 1`).first<{ n: number }>();
+    await c.env.DB.prepare(`UPDATE campagnes SET total_agents = ? WHERE id = ?`).bind(total?.n ?? 0, campagneId).run();
+  }
+
+  // Passer la campagne en cours au premier traitement
+  if (campagne['statut'] === 'brouillon') {
+    await c.env.DB.prepare(`UPDATE campagnes SET statut = 'en_cours', lance_le = datetime('now') WHERE id = ?`).bind(campagneId).run();
+  }
+
+  // Upsert transaction pour cet agent
+  const existing = await c.env.DB.prepare(
+    `SELECT id, statut FROM transactions WHERE campagne_id = ? AND agent_id = ? ORDER BY id DESC LIMIT 1`
+  ).bind(campagneId, body.agent_id).first<{ id: number; statut: string }>();
+
+  const shouldApplyCounters = !existing || existing.statut !== body.statut;
+
+  if (existing) {
+    // Ajuster compteurs si on change le statut final
+    if (existing.statut !== body.statut) {
+      if (existing.statut === 'confirme') {
+        await c.env.DB.prepare(`UPDATE campagnes SET agents_ok = MAX(0, agents_ok - 1) WHERE id = ?`).bind(campagneId).run();
+      }
+      if (existing.statut === 'echec') {
+        await c.env.DB.prepare(`UPDATE campagnes SET agents_echec = MAX(0, agents_echec - 1) WHERE id = ?`).bind(campagneId).run();
+      }
+    }
+
+    await c.env.DB.prepare(
+      `UPDATE transactions
+       SET option_used = ?, statut = ?, montant_fcfa = ?,
+           airtel_message = ?, airtel_raw_response = ?,
+           confirme_le = CASE WHEN ? = 'confirme' THEN datetime('now') ELSE NULL END,
+           tente_le = datetime('now')
+       WHERE id = ?`
+    ).bind(
+      body.action,
+      body.statut,
+      body.action === 'argent' ? montant : null,
+      body.sms,
+      JSON.stringify({ mode: 'manuel', sms: body.sms, action: body.action, responsable_id: Number(user.sub) }),
+      body.statut,
+      existing.id
+    ).run();
+  } else {
+    const inserted = await c.env.DB.prepare(
+      `INSERT INTO transactions (campagne_id, agent_id, telephone, montant_fcfa, option_used, statut, airtel_message, airtel_raw_response, tente_le, confirme_le)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), CASE WHEN ? = 'confirme' THEN datetime('now') ELSE NULL END)
+       RETURNING id`
+    ).bind(
+      campagneId,
+      body.agent_id,
+      agent.telephone,
+      body.action === 'argent' ? montant : null,
+      body.action,
+      body.statut,
+      body.sms,
+      JSON.stringify({ mode: 'manuel', sms: body.sms, action: body.action, responsable_id: Number(user.sub) }),
+      body.statut
+    ).first<{ id: number }>();
+
+    if (!inserted) return c.json({ error: 'Impossible de créer la transaction' }, 500);
+  }
+
+  // Incrémenter compteurs campagne selon le statut
+  if (shouldApplyCounters) {
+    if (body.statut === 'confirme') {
+      await c.env.DB.prepare(`UPDATE campagnes SET agents_ok = agents_ok + 1 WHERE id = ?`).bind(campagneId).run();
+    } else {
+      await c.env.DB.prepare(`UPDATE campagnes SET agents_echec = agents_echec + 1 WHERE id = ?`).bind(campagneId).run();
+    }
+  }
+
+  await c.env.DB.prepare(
+    `INSERT INTO audit_logs (campagne_id, agent_id, responsable_id, action, details) VALUES (?, ?, ?, ?, ?)`
+  ).bind(
+    campagneId,
+    body.agent_id,
+    Number(user.sub),
+    body.action === 'argent'
+      ? (body.statut === 'confirme' ? 'MANUAL_ARGENT_CONFIRME' : 'MANUAL_ARGENT_ECHEC')
+      : (body.statut === 'confirme' ? 'MANUAL_FORFAIT_CONFIRME' : 'MANUAL_FORFAIT_ECHEC'),
+    JSON.stringify({ sms: body.sms, montant_fcfa: body.action === 'argent' ? montant : null })
+  ).run();
+
+  // Statut final si terminé
+  const updated = await c.env.DB.prepare(`SELECT total_agents, agents_ok, agents_echec FROM campagnes WHERE id = ?`)
+    .bind(campagneId).first<{ total_agents: number; agents_ok: number; agents_echec: number }>();
+  if (updated) {
+    const done = (updated.agents_ok + updated.agents_echec);
+    if (updated.total_agents > 0 && done >= updated.total_agents) {
+      const final = updated.agents_echec === 0 ? 'terminee' : updated.agents_ok === 0 ? 'annulee' : 'partielle';
+      await c.env.DB.prepare(`UPDATE campagnes SET statut = ?, termine_le = datetime('now') WHERE id = ?`).bind(final, campagneId).run();
+    }
+  }
+
+  return c.json({ ok: true });
 });
 
 // ── Supprimer une campagne — Super Admin uniquement ────────
