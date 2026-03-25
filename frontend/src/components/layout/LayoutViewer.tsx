@@ -1,9 +1,9 @@
-import { Outlet, useNavigate } from 'react-router-dom';
+import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useEffect, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '../../hooks/useAuth';
 import { usePWA } from '../../hooks/usePWA';
-import { agentsApi, eventsApi } from '../../lib/api';
+import { agentsApi, eventsApi, sessionsApi } from '../../lib/api';
 import { useToast } from '../ui/Toast';
 
 function safeJsonParse<T>(value: unknown): T | null {
@@ -59,6 +59,7 @@ function fmtFallbackMessage(
 export function LayoutViewer() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
   const { canInstall, install } = usePWA();
   const qc = useQueryClient();
   const toast = useToast();
@@ -258,17 +259,20 @@ export function LayoutViewer() {
   }, [qc, user?.email]);
 
   useEffect(() => {
-    const onDocClick = (e: MouseEvent) => {
-      if (!notifOpenRef.current) return;
-      const target = e.target as Node;
-      if (notifPanelRef.current && !notifPanelRef.current.contains(target)) {
-        notifOpenRef.current = false;
-        setNotifVersion(v => v + 1);
+    let cancelled = false;
+    const tick = async () => {
+      try {
+        await sessionsApi.heartbeat({ path: location.pathname, page_title: document.title });
+      } catch {
+        /* ignore */
       }
     };
-    document.addEventListener('mousedown', onDocClick);
-    return () => document.removeEventListener('mousedown', onDocClick);
-  }, []);
+    const interval = window.setInterval(() => {
+      if (!cancelled) tick();
+    }, 10_000);
+    tick();
+    return () => { cancelled = true; window.clearInterval(interval); };
+  }, [location.pathname]);
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -325,7 +329,15 @@ export function LayoutViewer() {
 
                 {notifOpenRef.current && (
                   <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4">
-                    <div className="w-full max-w-sm bg-white border border-gray-200 rounded-xl shadow-lg overflow-hidden">
+                    <button
+                      className="absolute inset-0 bg-black/40"
+                      onClick={() => {
+                        notifOpenRef.current = false;
+                        setNotifVersion(v => v + 1);
+                      }}
+                      aria-label="Fermer"
+                    />
+                    <div className="relative w-full max-w-lg bg-white border border-gray-200 rounded-2xl shadow-xl overflow-hidden">
                       <div className="px-3 py-2 border-b border-gray-100 flex items-center justify-between">
                         <p className="text-xs font-semibold text-gray-700">Notifications</p>
                         <button
@@ -340,7 +352,7 @@ export function LayoutViewer() {
                           </svg>
                         </button>
                       </div>
-                      <div className="max-h-72 overflow-y-auto">
+                      <div className="max-h-[70vh] overflow-y-auto">
                         {notificationsRef.current.length === 0 ? (
                           <p className="text-xs text-gray-400 p-4">Aucune notification</p>
                         ) : (

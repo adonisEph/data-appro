@@ -116,3 +116,23 @@ export const eventsApi = {
     );
   },
 };
+
+// Sessions (présence)
+export const sessionsApi = {
+  heartbeat: (data: { path?: string; page_title?: string }) =>
+    request<{ ok: boolean }>('/sessions/heartbeat', { method: 'POST', body: JSON.stringify(data) }),
+  active: () =>
+    request<{ sessions: Array<{ responsable_id: number; agent_id: number | null; email: string; is_super_admin: number; is_viewer: number; path: string | null; page_title: string | null; last_seen_at: string; nom?: string; prenom?: string; telephone?: string }> }>('/sessions/active'),
+  history: (params: { from?: string; to?: string; email?: string; activity?: string; limit?: number }) => {
+    const qs = new URLSearchParams(
+      Object.fromEntries(
+        Object.entries(params)
+          .filter(([, v]) => v !== undefined && v !== null && String(v).trim() !== '')
+          .map(([k, v]) => [k, String(v)])
+      )
+    ).toString();
+    return request<{ events: Array<{ id: number; responsable_id: number; agent_id: number | null; email: string; event_type: string; path: string | null; page_title: string | null; ip_address: string | null; created_at: string; nom?: string; prenom?: string; telephone?: string }> }>(
+      `/sessions/history${qs ? '?' + qs : ''}`
+    );
+  },
+};

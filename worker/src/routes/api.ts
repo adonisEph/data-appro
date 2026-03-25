@@ -50,6 +50,26 @@ api.post('/auth/login', async c => {
       is_viewer: resp.is_viewer === 1,
     });
 
+    try {
+      const ua = (c.req.header('User-Agent') ?? '').slice(0, 300);
+      const ip = c.req.header('CF-Connecting-IP') ?? c.req.header('X-Forwarded-For') ?? null;
+      await c.env.DB.prepare(
+        `INSERT INTO session_events (responsable_id, agent_id, email, event_type, path, page_title, user_agent, ip_address)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+      ).bind(
+        resp.id,
+        resp.agent_id,
+        resp.email,
+        'login',
+        '/login',
+        'Login',
+        ua,
+        ip
+      ).run();
+    } catch {
+      /* ignore */
+    }
+
     return c.json({
       token,
       user: {
@@ -351,6 +371,176 @@ eventsRouter.get('/', async c => {
 });
 
 api.route('/events', eventsRouter);
+
+// ══════════════════════════════════════════════════════════
+// SESSIONS (présence) — heartbeat + listing Super Admin
+// ══════════════════════════════════════════════════════════
+const sessionsRouter = new Hono<AppEnv>();
+sessionsRouter.use('*', authMiddleware);
+
+sessionsRouter.post('/heartbeat', async c => {
+  const user = c.get('user') as JWTPayload;
+  let body: { path?: string; page_title?: string } = {};
+  try {
+    body = await c.req.json<{ path?: string; page_title?: string }>();
+  } catch {
+    /* ignore */
+  }
+
+  const responsableId = Number(user.sub);
+  const agentId = typeof user.agent_id === 'number' ? user.agent_id : null;
+  const email = String(user.email ?? '');
+  const isSuperAdmin = user.is_super_admin ? 1 : 0;
+  const isViewer = user.is_viewer ? 1 : 0;
+  const path = body.path ? String(body.path).slice(0, 300) : null;
+  const pageTitle = body.page_title ? String(body.page_title).slice(0, 120) : null;
+  const userAgent = (c.req.header('User-Agent') ?? '').slice(0, 300);
+  const ip = c.req.header('CF-Connecting-IP') ?? c.req.header('X-Forwarded-For') ?? null;
+
+  if (!Number.isFinite(responsableId)) return c.json({ error: 'Utilisateur invalide' }, 400);
+
+  const prev = await c.env.DB.prepare(
+    `SELECT path, page_title FROM active_sessions WHERE responsable_id = ? LIMIT 1`
+  ).bind(responsableId).first<{ path: string | null; page_title: string | null }>();
+
+  await c.env.DB.prepare(
+    `INSERT INTO active_sessions (responsable_id, agent_id, email, is_super_admin, is_viewer, path, page_title, user_agent, last_seen_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+     ON CONFLICT(responsable_id) DO UPDATE SET
+       agent_id = excluded.agent_id,
+       email = excluded.email,
+       is_super_admin = excluded.is_super_admin,
+       is_viewer = excluded.is_viewer,
+       path = excluded.path,
+       page_title = excluded.page_title,
+       user_agent = excluded.user_agent,
+       last_seen_at = datetime('now')`
+  ).bind(
+    responsableId,
+    agentId,
+    email,
+    isSuperAdmin,
+    isViewer,
+    path,
+    pageTitle,
+    userAgent
+  ).run();
+
+  if (path && (prev?.path !== path || (pageTitle && prev?.page_title !== pageTitle))) {
+    await c.env.DB.prepare(
+      `INSERT INTO session_events (responsable_id, agent_id, email, event_type, path, page_title, user_agent, ip_address)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+    ).bind(
+      responsableId,
+      agentId,
+      email,
+      'navigate',
+      path,
+      pageTitle,
+      userAgent,
+      ip
+    ).run();
+  }
+
+  return c.json({ ok: true });
+});
+
+sessionsRouter.get('/active', superAdminMiddleware, async c => {
+  const { results } = await c.env.DB.prepare(
+    `SELECT s.responsable_id, s.agent_id, s.email, s.is_super_admin, s.is_viewer,
+            s.path, s.page_title, s.last_seen_at,
+            a.nom, a.prenom, a.telephone
+     FROM active_sessions s
+     LEFT JOIN agents a ON a.id = s.agent_id
+     WHERE s.last_seen_at >= datetime('now', '-2 minutes')
+     ORDER BY s.last_seen_at DESC`
+  ).all();
+  return c.json({ sessions: results ?? [] });
+});
+
+sessionsRouter.get('/history', superAdminMiddleware, async c => {
+  const q = c.req.query();
+  const from = q.from ? String(q.from) : null;
+  const to = q.to ? String(q.to) : null;
+  const email = q.email ? String(q.email).trim() : null;
+  const activity = q.activity ? String(q.activity).trim() : null;
+  const limit = Math.min(500, Math.max(1, q.limit ? Number(q.limit) : 100));
+
+  let sql =
+    `SELECT e.id, e.responsable_id, e.agent_id, e.email, e.event_type, e.path, e.page_title, e.user_agent, e.ip_address, e.created_at,
+            a.nom, a.prenom, a.telephone
+     FROM session_events e
+     LEFT JOIN agents a ON a.id = e.agent_id
+     WHERE 1=1`;
+  const params: unknown[] = [];
+
+  if (from) { sql += ' AND e.created_at >= ?'; params.push(from); }
+  if (to) { sql += ' AND e.created_at <= ?'; params.push(to); }
+  if (email) { sql += ' AND e.email LIKE ?'; params.push(`%${email}%`); }
+  if (activity) {
+    sql += ' AND (COALESCE(e.path,\'\') LIKE ? OR COALESCE(e.page_title,\'\') LIKE ? OR COALESCE(e.event_type,\'\') LIKE ?)';
+    const pat = `%${activity}%`;
+    params.push(pat, pat, pat);
+  }
+
+  sql += ' ORDER BY e.created_at DESC LIMIT ?';
+  params.push(limit);
+
+  const { results } = await c.env.DB.prepare(sql).bind(...params).all();
+  return c.json({ events: results ?? [] });
+});
+
+sessionsRouter.get('/history.csv', superAdminMiddleware, async c => {
+  const q = c.req.query();
+  const from = q.from ? String(q.from) : null;
+  const to = q.to ? String(q.to) : null;
+  const email = q.email ? String(q.email).trim() : null;
+  const activity = q.activity ? String(q.activity).trim() : null;
+  const limit = Math.min(2000, Math.max(1, q.limit ? Number(q.limit) : 1000));
+
+  let sql =
+    `SELECT e.id, e.email, e.event_type, e.path, e.page_title, e.ip_address, e.created_at,
+            a.nom, a.prenom, a.telephone
+     FROM session_events e
+     LEFT JOIN agents a ON a.id = e.agent_id
+     WHERE 1=1`;
+  const params: unknown[] = [];
+  if (from) { sql += ' AND e.created_at >= ?'; params.push(from); }
+  if (to) { sql += ' AND e.created_at <= ?'; params.push(to); }
+  if (email) { sql += ' AND e.email LIKE ?'; params.push(`%${email}%`); }
+  if (activity) {
+    sql += ' AND (COALESCE(e.path,\'\') LIKE ? OR COALESCE(e.page_title,\'\') LIKE ? OR COALESCE(e.event_type,\'\') LIKE ?)';
+    const pat = `%${activity}%`;
+    params.push(pat, pat, pat);
+  }
+  sql += ' ORDER BY e.created_at DESC LIMIT ?';
+  params.push(limit);
+
+  const { results } = await c.env.DB.prepare(sql).bind(...params).all<Record<string, unknown>>();
+
+  const headers = ['ID', 'Email', 'Nom', 'Prénom', 'Téléphone', 'Type', 'Path', 'Page', 'IP', 'Date'];
+  const rows = (results ?? []).map(r => [
+    r['id'],
+    r['email'],
+    r['nom'] ?? '',
+    r['prenom'] ?? '',
+    r['telephone'] ?? '',
+    r['event_type'],
+    r['path'] ?? '',
+    r['page_title'] ?? '',
+    r['ip_address'] ?? '',
+    r['created_at'],
+  ].map(v => `"${String(v ?? '').replace(/"/g, '""')}"`).join(','));
+
+  return new Response([headers.join(','), ...rows].join('\r\n'), {
+    headers: {
+      'Content-Type': 'text/csv; charset=utf-8',
+      'Content-Disposition': `attachment; filename="sessions-history.csv"`,
+    },
+  });
+});
+
+api.route('/sessions', sessionsRouter);
 
 // ══════════════════════════════════════════════════════════
 // UTILISATEURS — Super Admin
