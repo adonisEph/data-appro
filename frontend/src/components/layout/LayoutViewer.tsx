@@ -324,39 +324,41 @@ export function LayoutViewer() {
                 </button>
 
                 {notifOpenRef.current && (
-                  <div className="fixed left-1/2 top-16 -translate-x-1/2 w-[calc(100vw-2rem)] max-w-sm bg-white border border-gray-200 rounded-xl shadow-lg overflow-hidden z-50 sm:absolute sm:left-auto sm:top-10 sm:right-0 sm:translate-x-0 sm:w-80">
-                    <div className="px-3 py-2 border-b border-gray-100 flex items-center justify-between">
-                      <p className="text-xs font-semibold text-gray-700">Notifications</p>
-                      <button
-                        onClick={() => {
-                          notifOpenRef.current = false;
-                          setNotifVersion(v => v + 1);
-                        }}
-                        className="text-gray-400 hover:text-gray-700 p-1" title="Fermer"
-                      >
-                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                        </svg>
-                      </button>
-                    </div>
-                    <div className="max-h-72 overflow-y-auto">
-                      {notificationsRef.current.length === 0 ? (
-                        <p className="text-xs text-gray-400 p-4">Aucune notification</p>
-                      ) : (
-                        <div className="divide-y divide-gray-100">
-                          {notificationsRef.current.map(n => (
-                            <div key={n.id} className="px-3 py-2">
-                              <div className="flex items-start justify-between gap-2">
-                                <div className="min-w-0">
-                                  <p className="text-xs font-semibold text-gray-800 truncate">{n.title}</p>
-                                  {n.message && <p className="text-xs text-gray-500 truncate">{n.message}</p>}
+                  <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4">
+                    <div className="w-full max-w-sm bg-white border border-gray-200 rounded-xl shadow-lg overflow-hidden">
+                      <div className="px-3 py-2 border-b border-gray-100 flex items-center justify-between">
+                        <p className="text-xs font-semibold text-gray-700">Notifications</p>
+                        <button
+                          onClick={() => {
+                            notifOpenRef.current = false;
+                            setNotifVersion(v => v + 1);
+                          }}
+                          className="text-gray-400 hover:text-gray-700 p-1" title="Fermer"
+                        >
+                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                          </svg>
+                        </button>
+                      </div>
+                      <div className="max-h-72 overflow-y-auto">
+                        {notificationsRef.current.length === 0 ? (
+                          <p className="text-xs text-gray-400 p-4">Aucune notification</p>
+                        ) : (
+                          <div className="divide-y divide-gray-100">
+                            {notificationsRef.current.map(n => (
+                              <div key={n.id} className="px-3 py-2">
+                                <div className="flex items-start justify-between gap-2">
+                                  <div className="min-w-0">
+                                    <p className="text-xs font-semibold text-gray-800 truncate">{n.title}</p>
+                                    {n.message && <p className="text-xs text-gray-500 truncate">{n.message}</p>}
+                                  </div>
+                                  <span className="text-[10px] text-gray-400 shrink-0">{new Date(n.created_at).toLocaleTimeString('fr-FR')}</span>
                                 </div>
-                                <span className="text-[10px] text-gray-400 shrink-0">{new Date(n.created_at).toLocaleTimeString('fr-FR')}</span>
                               </div>
-                            </div>
-                          ))}
-                        </div>
-                      )}
+                            ))}
+                          </div>
+                        )}
+                      </div>
                     </div>
                   </div>
                 )}
