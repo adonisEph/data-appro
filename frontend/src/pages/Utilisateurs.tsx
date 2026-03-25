@@ -227,7 +227,7 @@ export default function UtilisateursPage() {
       {/* Modal Création */}
       <Modal open={createModal} onClose={() => setCreateModal(false)} title="Nouvel utilisateur">
         <div className="space-y-4">
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="block text-xs font-medium text-gray-700 mb-1">Prénom *</label>
               <input type="text" value={form.prenom} onChange={e => setForm(f => ({ ...f, prenom: e.target.value }))}
@@ -250,7 +250,7 @@ export default function UtilisateursPage() {
             <input type="email" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"/>
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="block text-xs font-medium text-gray-700 mb-1">Mot de passe *</label>
               <input type="password" value={form.password} onChange={e => setForm(f => ({ ...f, password: e.target.value }))}
@@ -280,7 +280,7 @@ export default function UtilisateursPage() {
             Vous pouvez assigner n'importe quel quota à n'importe quel poste.
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="block text-xs font-medium text-gray-700 mb-1">Quota (GB)</label>
               <input type="number" step="0.5" value={form.quota_gb} onChange={e => setForm(f => ({ ...f, quota_gb: Number(e.target.value) }))}

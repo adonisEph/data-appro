@@ -1,8 +1,11 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { clsx } from 'clsx';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '../../hooks/useAuth';
 import { usePWA } from '../../hooks/usePWA';
+import { agentsApi } from '../../lib/api';
+import { useToast } from '../ui/Toast';
 
 const NAV = [
   {
@@ -29,6 +32,57 @@ export function Layout() {
   const location = useLocation();
   const { canInstall, isInstalling, install } = usePWA();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const qc = useQueryClient();
+  const toast = useToast();
+  const lastAgentsSnapshotRef = useRef<Map<number, { quota_gb: number; telephone: string }>>(new Map());
+  const snapshotReadyRef = useRef(false);
+
+  useQuery({
+    queryKey: ['agents'],
+    queryFn: agentsApi.list,
+    refetchInterval: 20_000,
+    refetchOnWindowFocus: true,
+    staleTime: 0,
+    onSuccess: (res) => {
+      const agents = res.agents ?? [];
+
+      if (!snapshotReadyRef.current) {
+        const next = new Map<number, { quota_gb: number; telephone: string }>();
+        agents.forEach(a => next.set(a.id, { quota_gb: a.quota_gb, telephone: a.telephone }));
+        lastAgentsSnapshotRef.current = next;
+        snapshotReadyRef.current = true;
+        return;
+      }
+
+      const prev = lastAgentsSnapshotRef.current;
+      const next = new Map<number, { quota_gb: number; telephone: string }>();
+
+      let addedCount = 0;
+      let quotaChangedCount = 0;
+
+      agents.forEach(a => {
+        next.set(a.id, { quota_gb: a.quota_gb, telephone: a.telephone });
+        const old = prev.get(a.id);
+        if (!old) {
+          addedCount++;
+          return;
+        }
+        if (old.quota_gb !== a.quota_gb) quotaChangedCount++;
+      });
+
+      lastAgentsSnapshotRef.current = next;
+
+      if (addedCount > 0) {
+        toast.info('Agents', `${addedCount} agent${addedCount > 1 ? 's' : ''} ajouté${addedCount > 1 ? 's' : ''}`);
+        qc.invalidateQueries({ queryKey: ['stats'] });
+      }
+
+      if (quotaChangedCount > 0) {
+        toast.info('Quota data', `${quotaChangedCount} agent${quotaChangedCount > 1 ? 's' : ''} mis à jour`);
+        qc.invalidateQueries({ queryKey: ['stats'] });
+      }
+    },
+  });
 
   // Fermer sidebar sur changement de route (mobile)
   useEffect(() => { setSidebarOpen(false); }, [location.pathname]);

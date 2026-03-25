@@ -482,9 +482,16 @@ historiqueRouter.get('/transactions/:id/preuve', async c => {
 historiqueRouter.get('/stats', async c => {
   const totalAgents    = await c.env.DB.prepare(`SELECT COUNT(*) as n FROM agents WHERE actif = 1`).first<{ n: number }>();
   const totalCampagnes = await c.env.DB.prepare(`SELECT COUNT(*) as n FROM campagnes`).first<{ n: number }>();
+  const budgetAgents   = await c.env.DB.prepare(`SELECT COALESCE(SUM(prix_cfa), 0) as n FROM agents WHERE actif = 1`).first<{ n: number }>();
   const lastCampagne   = await c.env.DB.prepare(`SELECT * FROM campagnes ORDER BY mois DESC LIMIT 1`).first();
   const txStats        = await c.env.DB.prepare(`SELECT statut, COUNT(*) as n FROM transactions GROUP BY statut`).all<{ statut: string; n: number }>();
-  return c.json({ total_agents: totalAgents?.n ?? 0, total_campagnes: totalCampagnes?.n ?? 0, last_campagne: lastCampagne, transactions_par_statut: txStats.results });
+  return c.json({
+    total_agents: totalAgents?.n ?? 0,
+    total_campagnes: totalCampagnes?.n ?? 0,
+    budget_total_agents: budgetAgents?.n ?? 0,
+    last_campagne: lastCampagne,
+    transactions_par_statut: txStats.results,
+  });
 });
 
 api.route('/historique', historiqueRouter);

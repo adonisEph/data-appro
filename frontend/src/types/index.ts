@@ -70,6 +70,7 @@ export interface Transaction {
 
 export interface DashboardStats {
   total_agents: number; total_campagnes: number;
+  budget_total_agents: number;
   last_campagne: Campagne | null;
   transactions_par_statut: Array<{ statut: string; n: number }>;
 }

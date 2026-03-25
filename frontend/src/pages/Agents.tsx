@@ -135,6 +135,8 @@ export default function AgentsPage() {
     return acc;
   }, {} as Record<string, number>);
 
+  const budgetTotal = agents.reduce((sum, a) => sum + (a.prix_cfa ?? 0), 0);
+
   const lastUpdated = dataUpdatedAt ? new Date(dataUpdatedAt) : null;
 
   return (
@@ -183,6 +185,16 @@ export default function AgentsPage() {
       </div>
 
       {/* Résumé par quota */}
+      <Card className="p-4 md:p-5">
+        <div className="flex items-center justify-between">
+          <p className="text-sm font-medium text-gray-600">Budget total agents</p>
+          <p className="text-xl md:text-2xl font-bold text-gray-900">
+            {budgetTotal.toLocaleString('fr-FR')} FCFA
+          </p>
+        </div>
+        <p className="text-xs text-gray-400 mt-1">Somme des prix CFA de tous les agents actifs</p>
+      </Card>
+
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         {Object.entries(quotaGroups).sort((a, b) => parseFloat(a[0]) - parseFloat(b[0])).slice(0, 4).map(([quota, count]) => (
           <Card key={quota} className="p-3 md:p-4">

@@ -63,6 +63,9 @@ export default function DashboardPage() {
         <StatCard label="Agents actifs" value={data?.total_agents ?? 0} sub="Dans le système" color="indigo"
           icon={<svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/></svg>}
         />
+        <StatCard label="Budget agents" value={(data?.budget_total_agents ?? 0).toLocaleString('fr-FR') + ' FCFA'} sub="Somme des prix CFA" color="amber"
+          icon={<svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 1.343-3 3v1h6v-1c0-1.657-1.343-3-3-3zm-7 7h14v2a2 2 0 01-2 2H7a2 2 0 01-2-2v-2zM7 11a5 5 0 0110 0v2H7v-2z"/></svg>}
+        />
         <StatCard label="Campagnes" value={data?.total_campagnes ?? 0} sub="Total historique" color="green"
           icon={<svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>}
         />
