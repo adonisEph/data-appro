@@ -70,6 +70,36 @@ export function LayoutViewer() {
   const notifOpenRef = useRef(false);
   const notificationsRef = useRef<Array<{ id: number; title: string; message?: string; created_at: string; action: string }>>([]);
   const unreadIdsRef = useRef<Set<number>>(new Set());
+  const audioCtxRef = useRef<AudioContext | null>(null);
+
+  const playNotifSound = async () => {
+    try {
+      const AudioCtx = window.AudioContext || (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+      if (!AudioCtx) return;
+      if (!audioCtxRef.current) audioCtxRef.current = new AudioCtx();
+      const ctx = audioCtxRef.current;
+      if (ctx.state === 'suspended') await ctx.resume();
+
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.value = 880;
+      gain.gain.value = 0.0001;
+
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+
+      const t0 = ctx.currentTime;
+      gain.gain.setValueAtTime(0.0001, t0);
+      gain.gain.exponentialRampToValueAtTime(0.12, t0 + 0.01);
+      gain.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.18);
+      osc.start(t0);
+      osc.stop(t0 + 0.2);
+    } catch {
+      /* ignore */
+    }
+  };
+
   const [notifVersion, setNotifVersion] = useState(0);
 
   const { data } = useQuery({
@@ -233,6 +263,8 @@ export function LayoutViewer() {
           if (out.length >= 50) break;
         }
         notificationsRef.current = out;
+
+        if (newNotifs.length > 0) playNotifSound();
 
         for (const n of newNotifs) unreadIdsRef.current.add(n.id);
         try { localStorage.setItem(kUnread, JSON.stringify(Array.from(unreadIdsRef.current))); } catch { /* ignore */ }

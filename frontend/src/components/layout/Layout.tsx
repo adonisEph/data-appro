@@ -104,6 +104,35 @@ export function Layout() {
   const sinceIdRef = useRef(0);
   const notifPanelRef = useRef<HTMLDivElement | null>(null);
   const sessionPanelRef = useRef<HTMLDivElement | null>(null);
+  const audioCtxRef = useRef<AudioContext | null>(null);
+
+  const playNotifSound = async () => {
+    try {
+      const AudioCtx = window.AudioContext || (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+      if (!AudioCtx) return;
+      if (!audioCtxRef.current) audioCtxRef.current = new AudioCtx();
+      const ctx = audioCtxRef.current;
+      if (ctx.state === 'suspended') await ctx.resume();
+
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.value = 880;
+      gain.gain.value = 0.0001;
+
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+
+      const t0 = ctx.currentTime;
+      gain.gain.setValueAtTime(0.0001, t0);
+      gain.gain.exponentialRampToValueAtTime(0.12, t0 + 0.01);
+      gain.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.18);
+      osc.start(t0);
+      osc.stop(t0 + 0.2);
+    } catch {
+      /* ignore */
+    }
+  };
 
   const { data: agentsData } = useQuery({
     queryKey: ['agents'],
@@ -268,6 +297,8 @@ export function Layout() {
           }
           return out;
         });
+
+        if (newNotifs.length > 0) playNotifSound();
 
         setUnreadIds(prev => {
           const next = new Set(prev);
