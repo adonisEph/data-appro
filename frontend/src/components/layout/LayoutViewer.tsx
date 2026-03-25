@@ -34,6 +34,28 @@ function fmtCampagneLabel(d: { mois?: string; budget_fcfa?: number; compte_sourc
   return fallbackCampagneId ? `Campagne #${fallbackCampagneId}` : undefined;
 }
 
+function fmtDefaultTitle(action: string) {
+  return action.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, s => s.toUpperCase());
+}
+
+function fmtFallbackMessage(
+  action: string,
+  details: Record<string, unknown> | null,
+  detailsRaw: string | null,
+  agentId: number | null,
+  campagneId: number | null
+) {
+  const agent = fmtAgentLabel(details as unknown as { nom?: string; prenom?: string; telephone?: string } | null, agentId);
+  const campagne = fmtCampagneLabel(details as unknown as { mois?: string; budget_fcfa?: number; compte_source?: string } | null, campagneId);
+  const raw = (typeof detailsRaw === 'string' ? detailsRaw.trim() : '');
+  const rawShort = raw && raw.length > 180 ? raw.slice(0, 180) + '…' : raw;
+
+  const parts = [agent, campagne].filter(Boolean);
+  if (parts.length > 0) return parts.join(' · ');
+  if (rawShort && rawShort !== '{}' && rawShort !== 'null') return rawShort;
+  return undefined;
+}
+
 export function LayoutViewer() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
@@ -178,10 +200,23 @@ export function LayoutViewer() {
             title = 'Campagne créée';
             message = fmtCampagneLabel(details as unknown as { mois?: string; budget_fcfa?: number; compte_source?: string } | null, campagneId);
           }
+          else if (action === 'CAMPAGNE_DELETED') {
+            title = 'Campagne supprimée';
+            message = fmtCampagneLabel(details as unknown as { mois?: string; budget_fcfa?: number; compte_source?: string } | null, campagneId);
+          }
+          else if (action === 'CAMPAGNE_UPDATED') {
+            title = 'Campagne modifiée';
+            message = fmtCampagneLabel(details as unknown as { mois?: string; budget_fcfa?: number; compte_source?: string } | null, campagneId);
+          }
           else if (action === 'IMPORT_AGENTS') { title = 'Import agents'; }
           else if (action.startsWith('PROVISION_')) { title = 'Provisionnement'; message = fmtCampagneLabel(details as unknown as { mois?: string; budget_fcfa?: number; compte_source?: string } | null, campagneId); }
           else if (action.startsWith('RELANCE_')) { title = 'Relance'; message = fmtCampagneLabel(details as unknown as { mois?: string; budget_fcfa?: number; compte_source?: string } | null, campagneId); }
           else if (action.startsWith('WEBHOOK_')) { title = 'Webhook'; }
+
+          if (!message) {
+            if (title === 'Notification') title = fmtDefaultTitle(action);
+            message = fmtFallbackMessage(action, details, detailsRaw, agentId, campagneId);
+          }
 
           newNotifs.push({ id: (e as { id: number }).id, title, message, created_at, action });
         }

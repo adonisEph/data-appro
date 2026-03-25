@@ -716,13 +716,19 @@ campagnesRouter.delete('/:id', superAdminMiddleware, async c => {
   if (!campagne) return c.json({ error: 'Campagne introuvable' }, 404);
   if (campagne.statut === 'en_cours') return c.json({ error: 'Impossible de supprimer une campagne en cours' }, 409);
 
-  await c.env.DB.prepare(`DELETE FROM transactions WHERE campagne_id = ?`).bind(id).run();
-  await c.env.DB.prepare(`DELETE FROM campagnes WHERE id = ?`).bind(id).run();
+  try {
+    await c.env.DB.prepare(`DELETE FROM transactions WHERE campagne_id = ?`).bind(id).run();
+    await c.env.DB.prepare(`DELETE FROM audit_logs WHERE campagne_id = ?`).bind(id).run();
+    await c.env.DB.prepare(`DELETE FROM campagnes WHERE id = ?`).bind(id).run();
 
-  await c.env.DB.prepare(`INSERT INTO audit_logs (responsable_id, action, details) VALUES (?, ?, ?)`)
-    .bind(Number((c.get('user') as JWTPayload).sub), 'CAMPAGNE_DELETED', JSON.stringify({ id, mois: campagne.mois })).run();
+    await c.env.DB.prepare(`INSERT INTO audit_logs (responsable_id, action, details) VALUES (?, ?, ?)`)
+      .bind(Number((c.get('user') as JWTPayload).sub), 'CAMPAGNE_DELETED', JSON.stringify({ id, mois: campagne.mois })).run();
 
-  return c.json({ ok: true, message: `Campagne ${campagne.mois} supprimée` });
+    return c.json({ ok: true, message: `Campagne ${campagne.mois} supprimée` });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    return c.json({ error: 'Erreur serveur interne', details: msg }, 500);
+  }
 });
 
 api.route('/campagnes', campagnesRouter);
