@@ -324,7 +324,7 @@ export function LayoutViewer() {
                 </button>
 
                 {notifOpenRef.current && (
-                  <div className="absolute right-0 top-10 w-80 bg-white border border-gray-200 rounded-xl shadow-lg overflow-hidden z-50">
+                  <div className="fixed left-1/2 top-16 -translate-x-1/2 w-[calc(100vw-2rem)] max-w-sm bg-white border border-gray-200 rounded-xl shadow-lg overflow-hidden z-50 sm:absolute sm:left-auto sm:top-10 sm:right-0 sm:translate-x-0 sm:w-80">
                     <div className="px-3 py-2 border-b border-gray-100 flex items-center justify-between">
                       <p className="text-xs font-semibold text-gray-700">Notifications</p>
                       <button
