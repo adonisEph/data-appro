@@ -16,6 +16,7 @@ import UtilisateursPage from './pages/Utilisateurs';
 import RolesMetierPage from './pages/RolesMetier';
 import CampagnesLecteurPage from './pages/CampagnesLecteur';
 import CampagneDetailLecteurPage from './pages/CampagneDetailLecteur';
+import ComptePage from './pages/Compte';
 import './index.css';
 
 
@@ -44,6 +45,7 @@ function App() {
                 <Route path="campagnes/nouvelle" element={<NouvelleCampagnePage/>}/>
                 <Route path="campagnes/:id" element={<CampagneDetailPage/>}/>
                 <Route path="historique" element={<HistoriquePage/>}/>
+                <Route path="compte" element={<ComptePage/>}/>
                 <Route path="utilisateurs" element={<UtilisateursPage/>}/>
                 <Route path="roles-metier" element={<RolesMetierPage/>}/>
                 {/* Routes lecteur accessibles aussi depuis le layout principal */}

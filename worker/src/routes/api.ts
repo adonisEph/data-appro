@@ -71,6 +71,36 @@ api.post('/auth/login', async c => {
   }
 });
 
+api.post('/auth/change-password', authMiddleware, async c => {
+  const user = c.get('user');
+  const { old_password, new_password } = await c.req.json<{ old_password: string; new_password: string }>();
+  if (!old_password || !new_password) return c.json({ error: 'old_password et new_password requis' }, 400);
+  if (new_password.length < 6) return c.json({ error: 'Mot de passe trop court' }, 400);
+
+  const id = Number(user.sub);
+  const resp = await c.env.DB.prepare(
+    `SELECT id, password_hash FROM responsables WHERE id = ? AND actif = 1`
+  ).bind(id).first<{ id: number; password_hash: string }>();
+  if (!resp) return c.json({ error: 'Utilisateur introuvable' }, 404);
+
+  const encoder = new TextEncoder();
+  const oldHashBuffer = await crypto.subtle.digest('SHA-256', encoder.encode(old_password + String(resp.id)));
+  const oldHash = btoa(Array.from(new Uint8Array(oldHashBuffer)).map(b => String.fromCharCode(b)).join(''));
+  if (oldHash !== resp.password_hash) return c.json({ error: 'Ancien mot de passe incorrect' }, 401);
+
+  const newHashBuffer = await crypto.subtle.digest('SHA-256', encoder.encode(new_password + String(resp.id)));
+  const newHash = btoa(Array.from(new Uint8Array(newHashBuffer)).map(b => String.fromCharCode(b)).join(''));
+  await c.env.DB.prepare(`UPDATE responsables SET password_hash = ? WHERE id = ?`).bind(newHash, resp.id).run();
+
+  await c.env.DB.prepare(`INSERT INTO audit_logs (responsable_id, action, details) VALUES (?, ?, ?)`).bind(
+    resp.id,
+    'USER_PASSWORD_CHANGED',
+    JSON.stringify({ by_self: true })
+  ).run();
+
+  return c.json({ ok: true });
+});
+
 // ══════════════════════════════════════════════════════════
 // RÔLES MÉTIER — CRUD Super Admin
 // ══════════════════════════════════════════════════════════

@@ -107,8 +107,28 @@ export default function AgentsPage() {
     return matchSearch && matchRole;
   });
 
+  const isDefaultAgentName = (nom: string, prenom: string) => {
+    const n = (nom ?? '').trim().toLowerCase();
+    const p = (prenom ?? '').trim().toLowerCase();
+    if (!n) return true;
+    if (n === 'agent') return true;
+    if (/^agent_?\d+$/.test(n)) return true;
+    if (/^agent\s*\d+$/.test(n)) return true;
+    if (/^agent_?\d+$/.test(p)) return true;
+    return false;
+  };
+
+  const displayed = [...filtered].sort((a, b) => {
+    const da = isDefaultAgentName(a.nom, a.prenom) ? 1 : 0;
+    const db = isDefaultAgentName(b.nom, b.prenom) ? 1 : 0;
+    if (da !== db) return da - db;
+    const an = `${a.nom} ${a.prenom}`.trim().toLowerCase();
+    const bn = `${b.nom} ${b.prenom}`.trim().toLowerCase();
+    return an.localeCompare(bn, 'fr');
+  });
+
   const exportExcel = () => {
-    const rows = filtered.map(a => ({
+    const rows = displayed.map(a => ({
       ID: a.id,
       Prenom: a.prenom,
       Nom: a.nom,
@@ -241,7 +261,7 @@ export default function AgentsPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-50">
-                  {filtered.map(agent => (
+                  {displayed.map(agent => (
                     <tr key={agent.id} className="hover:bg-gray-50">
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-3">
@@ -282,7 +302,7 @@ export default function AgentsPage() {
 
           {/* Cards mobile */}
           <div className="md:hidden space-y-2">
-            {filtered.map(agent => (
+            {displayed.map(agent => (
               <Card key={agent.id} className="p-4">
                 <div className="flex items-start justify-between gap-3 mb-3">
                   <div className="flex items-center gap-3 flex-1 min-w-0">

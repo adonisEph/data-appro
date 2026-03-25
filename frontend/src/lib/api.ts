@@ -19,6 +19,8 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
 export const authApi = {
   login: (email: string, password: string) =>
     request<{ token: string; user: User }>('/auth/login', { method: 'POST', body: JSON.stringify({ email, password }) }),
+  changePassword: (old_password: string, new_password: string) =>
+    request<{ ok: boolean }>('/auth/change-password', { method: 'POST', body: JSON.stringify({ old_password, new_password }) }),
 };
 
 // Rôles métier
