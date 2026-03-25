@@ -1,5 +1,5 @@
 import { Outlet, useNavigate } from 'react-router-dom';
-import { useRef } from 'react';
+import { useEffect, useRef } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '../../hooks/useAuth';
 import { usePWA } from '../../hooks/usePWA';
@@ -15,52 +15,54 @@ export function LayoutViewer() {
   const lastAgentsSnapshotRef = useRef<Map<number, { quota_gb: number; telephone: string }>>(new Map());
   const snapshotReadyRef = useRef(false);
 
-  useQuery({
+  const { data } = useQuery({
     queryKey: ['agents'],
     queryFn: agentsApi.list,
     refetchInterval: 20_000,
     refetchOnWindowFocus: true,
     staleTime: 0,
-    onSuccess: (res) => {
-      const agents = res.agents ?? [];
+  });
 
-      if (!snapshotReadyRef.current) {
-        const next = new Map<number, { quota_gb: number; telephone: string }>();
-        agents.forEach(a => next.set(a.id, { quota_gb: a.quota_gb, telephone: a.telephone }));
-        lastAgentsSnapshotRef.current = next;
-        snapshotReadyRef.current = true;
+  useEffect(() => {
+    const agents = data?.agents ?? [];
+    if (!data) return;
+
+    if (!snapshotReadyRef.current) {
+      const next = new Map<number, { quota_gb: number; telephone: string }>();
+      agents.forEach(a => next.set(a.id, { quota_gb: a.quota_gb, telephone: a.telephone }));
+      lastAgentsSnapshotRef.current = next;
+      snapshotReadyRef.current = true;
+      return;
+    }
+
+    const prev = lastAgentsSnapshotRef.current;
+    const next = new Map<number, { quota_gb: number; telephone: string }>();
+
+    let addedCount = 0;
+    let quotaChangedCount = 0;
+
+    agents.forEach(a => {
+      next.set(a.id, { quota_gb: a.quota_gb, telephone: a.telephone });
+      const old = prev.get(a.id);
+      if (!old) {
+        addedCount++;
         return;
       }
+      if (old.quota_gb !== a.quota_gb) quotaChangedCount++;
+    });
 
-      const prev = lastAgentsSnapshotRef.current;
-      const next = new Map<number, { quota_gb: number; telephone: string }>();
+    lastAgentsSnapshotRef.current = next;
 
-      let addedCount = 0;
-      let quotaChangedCount = 0;
+    if (addedCount > 0) {
+      toast.info('Agents', `${addedCount} agent${addedCount > 1 ? 's' : ''} ajouté${addedCount > 1 ? 's' : ''}`);
+      qc.invalidateQueries({ queryKey: ['stats'] });
+    }
 
-      agents.forEach(a => {
-        next.set(a.id, { quota_gb: a.quota_gb, telephone: a.telephone });
-        const old = prev.get(a.id);
-        if (!old) {
-          addedCount++;
-          return;
-        }
-        if (old.quota_gb !== a.quota_gb) quotaChangedCount++;
-      });
-
-      lastAgentsSnapshotRef.current = next;
-
-      if (addedCount > 0) {
-        toast.info('Agents', `${addedCount} agent${addedCount > 1 ? 's' : ''} ajouté${addedCount > 1 ? 's' : ''}`);
-        qc.invalidateQueries({ queryKey: ['stats'] });
-      }
-
-      if (quotaChangedCount > 0) {
-        toast.info('Quota data', `${quotaChangedCount} agent${quotaChangedCount > 1 ? 's' : ''} mis à jour`);
-        qc.invalidateQueries({ queryKey: ['stats'] });
-      }
-    },
-  });
+    if (quotaChangedCount > 0) {
+      toast.info('Quota data', `${quotaChangedCount} agent${quotaChangedCount > 1 ? 's' : ''} mis à jour`);
+      qc.invalidateQueries({ queryKey: ['stats'] });
+    }
+  }, [data, qc, toast]);
 
   return (
     <div className="min-h-screen bg-gray-50">

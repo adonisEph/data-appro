@@ -168,6 +168,62 @@ agentsRouter.get('/:id', async c => {
   return c.json({ agent });
 });
 
+agentsRouter.post('/', noViewerMiddleware, async c => {
+  const body = await c.req.json<{
+    nom: string; prenom: string; telephone: string;
+    role?: Role; role_label?: string | null;
+    quota_gb?: number; prix_cfa?: number; forfait_label?: string | null;
+  }>();
+
+  const nom = (body.nom ?? '').trim();
+  const prenom = (body.prenom ?? '').trim();
+  const telephone = (body.telephone ?? '').trim();
+  const role: Role = body.role ?? 'technicien';
+
+  if (!nom || !prenom || !telephone) return c.json({ error: 'nom, prenom, telephone requis' }, 400);
+  if (!['technicien', 'responsable_junior', 'responsable_senior', 'manager'].includes(role)) {
+    return c.json({ error: 'role invalide' }, 400);
+  }
+
+  const quota = body.quota_gb !== undefined ? body.quota_gb : ROLE_QUOTAS[role];
+  const prix = body.prix_cfa !== undefined ? body.prix_cfa : 0;
+
+  try {
+    const inserted = await c.env.DB.prepare(
+      `INSERT INTO agents (nom, prenom, telephone, role, role_label, quota_gb, prix_cfa, forfait_label)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`
+    ).bind(
+      nom,
+      prenom,
+      telephone,
+      role,
+      body.role_label ?? null,
+      quota,
+      prix,
+      body.forfait_label ?? null,
+    ).first<{ id: number }>();
+
+    if (!inserted) return c.json({ error: 'Erreur création agent' }, 500);
+
+    await c.env.DB.prepare(`INSERT INTO audit_logs (agent_id, responsable_id, action, details) VALUES (?, ?, ?, ?)`).bind(
+      inserted.id,
+      Number((c.get('user') as JWTPayload).sub),
+      'AGENT_CREATED',
+      JSON.stringify({ nom, prenom, telephone, role, quota_gb: quota, prix_cfa: prix, forfait_label: body.forfait_label ?? null, role_label: body.role_label ?? null })
+    ).run();
+
+    const agent = await c.env.DB.prepare(`SELECT * FROM agents WHERE id = ?`).bind(inserted.id).first();
+    return c.json({ ok: true, agent });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (msg.toLowerCase().includes('unique') || msg.toLowerCase().includes('constraint')) {
+      return c.json({ error: 'Ce numéro existe déjà' }, 409);
+    }
+    console.error('[Agent Create Error]', msg);
+    return c.json({ error: 'Erreur serveur interne', detail: msg }, 500);
+  }
+});
+
 agentsRouter.post('/import', noViewerMiddleware, async c => {
   const { agents } = await c.req.json<{
     agents: Array<{

@@ -20,13 +20,14 @@ export default function AgentsPage() {
   const qc = useQueryClient();
   const fileRef = useRef<HTMLInputElement>(null);
   const toast = useToast();
-  const { isSuperAdmin } = useAuth();
+  const { isSuperAdmin, isViewer } = useAuth();
 
   const [importPreview, setImportPreview] = useState<AgentImportRow[] | null>(null);
   const [importErrors, setImportErrors]   = useState<string[]>([]);
   const [importSummary, setImportSummary] = useState<Record<string, number> | null>(null);
   const [importModal, setImportModal]     = useState(false);
   const [editAgent, setEditAgent]         = useState<Agent | null>(null);
+  const [createAgent, setCreateAgent]     = useState(false);
   const [deleteAgent, setDeleteAgent]     = useState<Agent | null>(null);
   const [form, setForm]                   = useState<Partial<Agent>>({});
   const [search, setSearch]               = useState('');
@@ -39,6 +40,18 @@ export default function AgentsPage() {
     refetchInterval: 15_000,
     refetchOnWindowFocus: true,
     staleTime: 0,
+  });
+
+  const createMut = useMutation({
+    mutationFn: (data: Partial<Agent>) => agentsApi.create(data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['agents'] });
+      qc.invalidateQueries({ queryKey: ['stats'] });
+      toast.success('Agent créé');
+      setCreateAgent(false);
+      setForm({});
+    },
+    onError: (err: Error) => toast.error('Erreur', err.message),
   });
 
   // Rôles métier pour le select
@@ -96,6 +109,19 @@ export default function AgentsPage() {
   };
 
   const openEdit = (agent: Agent) => { setForm({ ...agent }); setEditAgent(agent); };
+  const openCreate = () => {
+    setForm({
+      nom: '',
+      prenom: '',
+      telephone: '',
+      role: 'technicien',
+      role_label: '',
+      quota_gb: ROLE_QUOTAS['technicien'],
+      prix_cfa: 0,
+      forfait_label: '',
+    });
+    setCreateAgent(true);
+  };
 
   const agents = data?.agents ?? [];
   const filtered = agents.filter(a => {
@@ -178,11 +204,23 @@ export default function AgentsPage() {
           </div>
         </div>
         <div className="flex gap-2">
-          <Button variant="secondary" size="sm" onClick={exportExcel} disabled={filtered.length === 0}>
+          {!isViewer && (
+            <Button variant="primary" size="sm" onClick={openCreate}>
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+              </svg>
+              <span className="hidden sm:inline">Ajouter un agent</span>
+              <span className="sm:hidden">Ajouter</span>
+            </Button>
+          )}
+          <Button variant="secondary" size="sm" onClick={exportExcel} disabled={filtered.length === 0 || isViewer}>
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+            </svg>
             <span className="hidden sm:inline">Exporter Excel</span>
             <span className="sm:hidden">Export</span>
           </Button>
-          <Button variant="secondary" size="sm" onClick={() => fileRef.current?.click()}>
+          <Button variant="secondary" size="sm" onClick={() => fileRef.current?.click()} disabled={isViewer}>
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3 3m0 0l3-3m-3 3V10"/>
             </svg>
@@ -278,13 +316,21 @@ export default function AgentsPage() {
                       </td>
                       <td className="px-4 py-3 text-right">
                         <div className="flex items-center justify-end gap-2">
-                          <button onClick={() => openEdit(agent)}
-                            className="text-brand-600 hover:text-brand-800 text-xs font-medium px-2 py-1 rounded hover:bg-brand-50">
-                            Modifier
-                          </button>
+                          {!isViewer && (
+                            <button onClick={() => openEdit(agent)} title="Modifier"
+                              className="inline-flex items-center gap-1.5 text-brand-600 hover:text-brand-800 text-xs font-medium px-2 py-1 rounded hover:bg-brand-50">
+                              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                              </svg>
+                              Modifier
+                            </button>
+                          )}
                           {isSuperAdmin && (
-                            <button onClick={() => setDeleteAgent(agent)}
-                              className="text-red-500 hover:text-red-700 text-xs font-medium px-2 py-1 rounded hover:bg-red-50">
+                            <button onClick={() => setDeleteAgent(agent)} title="Supprimer"
+                              className="inline-flex items-center gap-1.5 text-red-500 hover:text-red-700 text-xs font-medium px-2 py-1 rounded hover:bg-red-50">
+                              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3m-4 0h14" />
+                              </svg>
                               Supprimer
                             </button>
                           )}
@@ -321,8 +367,24 @@ export default function AgentsPage() {
                     {agent.prix_cfa > 0 && <span className="text-gray-600">{agent.prix_cfa.toLocaleString()} F</span>}
                   </div>
                   <div className="flex gap-2">
-                    <button onClick={() => openEdit(agent)} className="text-brand-600 text-xs font-medium px-2 py-1 rounded bg-brand-50">Modifier</button>
-                    {isSuperAdmin && <button onClick={() => setDeleteAgent(agent)} className="text-red-500 text-xs font-medium px-2 py-1 rounded bg-red-50">Supprimer</button>}
+                    {!isViewer && (
+                      <button onClick={() => openEdit(agent)} title="Modifier"
+                        className="inline-flex items-center gap-1.5 text-brand-600 text-xs font-medium px-2 py-1 rounded bg-brand-50">
+                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                        </svg>
+                        Modifier
+                      </button>
+                    )}
+                    {isSuperAdmin && (
+                      <button onClick={() => setDeleteAgent(agent)} title="Supprimer"
+                        className="inline-flex items-center gap-1.5 text-red-500 text-xs font-medium px-2 py-1 rounded bg-red-50">
+                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3m-4 0h14" />
+                        </svg>
+                        Supprimer
+                      </button>
+                    )}
                   </div>
                 </div>
               </Card>
@@ -331,6 +393,108 @@ export default function AgentsPage() {
           </div>
         </>
       )}
+
+      {/* Modal Création */}
+      <Modal open={createAgent} onClose={() => { setCreateAgent(false); setForm({}); }} title="Ajouter un nouvel agent">
+        <div className="space-y-4">
+          {/* Identité */}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">Prénom</label>
+              <input type="text" value={form.prenom ?? ''} onChange={e => setForm(f => ({ ...f, prenom: e.target.value }))}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"/>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">Nom</label>
+              <input type="text" value={form.nom ?? ''} onChange={e => setForm(f => ({ ...f, nom: e.target.value }))}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"/>
+            </div>
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-700 mb-1">Téléphone</label>
+            <input type="tel" value={form.telephone ?? ''} onChange={e => setForm(f => ({ ...f, telephone: e.target.value }))}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm font-mono focus:outline-none focus:ring-2 focus:ring-brand-500"/>
+          </div>
+
+          <hr className="border-gray-100"/>
+
+          <div>
+            <label className="block text-xs font-medium text-gray-700 mb-1">Rôle technique (interne)</label>
+            <select
+              value={(form.role as Role) ?? 'technicien'}
+              onChange={e => {
+                const role = e.target.value as Role;
+                setForm(f => ({
+                  ...f,
+                  role,
+                  quota_gb: f.quota_gb ?? ROLE_QUOTAS[role],
+                }));
+              }}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
+            >
+              {ROLES.map(r => <option key={r} value={r}>{ROLE_INTERNAL_LABELS[r]}</option>)}
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-xs font-medium text-gray-700 mb-1">Poste dans l'entreprise</label>
+            {rolesMetier.length > 0 ? (
+              <select value={form.role_label ?? ''} onChange={e => setForm(f => ({ ...f, role_label: e.target.value }))}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+                <option value="">-- Choisir un poste --</option>
+                {activeRolesMetier.map(r => <option key={r.id} value={r.label}>{r.label}</option>)}
+              </select>
+            ) : (
+              <input type="text" value={form.role_label ?? ''} onChange={e => setForm(f => ({ ...f, role_label: e.target.value }))}
+                placeholder="Ex: Ingénieur Réseau, Comptable…"
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"/>
+            )}
+          </div>
+
+          <hr className="border-gray-100"/>
+
+          <div>
+            <p className="text-xs font-medium text-gray-700 mb-2">Allocation data</p>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">Quota (GB)</label>
+                <input type="number" step="0.5" value={form.quota_gb ?? ''} onChange={e => setForm(f => ({ ...f, quota_gb: Number(e.target.value) }))}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"/>
+              </div>
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">Prix CFA</label>
+                <input type="number" value={form.prix_cfa ?? 0} onChange={e => setForm(f => ({ ...f, prix_cfa: Number(e.target.value) }))}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"/>
+              </div>
+            </div>
+            <div className="mt-2">
+              <label className="block text-xs text-gray-500 mb-1">Label forfait</label>
+              <input type="text" value={form.forfait_label ?? ''} onChange={e => setForm(f => ({ ...f, forfait_label: e.target.value }))}
+                placeholder="ex: 6.5GB, 14GB…"
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"/>
+            </div>
+          </div>
+
+          <div className="flex justify-end gap-3 pt-2">
+            <Button variant="secondary" onClick={() => { setCreateAgent(false); setForm({}); }}>Annuler</Button>
+            <Button
+              loading={createMut.isPending}
+              onClick={() => {
+                const nom = (form.nom ?? '').trim();
+                const prenom = (form.prenom ?? '').trim();
+                const telephone = (form.telephone ?? '').trim();
+                if (!nom || !prenom || !telephone) {
+                  toast.warning('Champs requis', 'Nom, prénom et téléphone sont obligatoires.');
+                  return;
+                }
+                createMut.mutate(form);
+              }}
+            >
+              Créer
+            </Button>
+          </div>
+        </div>
+      </Modal>
 
       {/* Modal Édition — rôle et quota complètement dissociés */}
       <Modal open={editAgent !== null} onClose={() => setEditAgent(null)} title="Modifier l'agent">

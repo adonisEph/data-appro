@@ -38,6 +38,8 @@ export const rolesMetierApi = {
 export const agentsApi = {
   list:   () => request<{ agents: Agent[]; total: number }>('/agents'),
   get:    (id: number) => request<{ agent: Agent }>(`/agents/${id}`),
+  create: (data: Partial<Agent>) =>
+    request<{ ok: boolean; agent: Agent }>('/agents', { method: 'POST', body: JSON.stringify(data) }),
   import: (agents: Array<Partial<Agent>>) =>
     request<{ imported: number; skipped: number; errors: string[] }>('/agents/import', { method: 'POST', body: JSON.stringify({ agents }) }),
   update: (id: number, data: Partial<Agent>) =>
