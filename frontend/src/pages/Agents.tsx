@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { agentsApi, rolesMetierApi } from '../lib/api';
 import { parseExcelFile, type AgentImportRow } from '../lib/excel';
 import * as XLSX from 'xlsx';
+import { clsx } from 'clsx';
 import { useToast } from '../components/ui/Toast';
 import { ConfirmModal } from '../components/ui/ConfirmModal';
 import { Card, Button, Modal, Spinner, EmptyState } from '../components/ui';
@@ -32,6 +33,7 @@ export default function AgentsPage() {
   const [form, setForm]                   = useState<Partial<Agent>>({});
   const [search, setSearch]               = useState('');
   const [filterRole, setFilterRole]       = useState('');
+  const [filterQuotaGb, setFilterQuotaGb] = useState<number | null>(null);
 
   // Agents avec refetch auto
   const { data, isLoading, dataUpdatedAt } = useQuery({
@@ -130,7 +132,8 @@ export default function AgentsPage() {
       a.nom.toLowerCase().includes(s) || a.prenom.toLowerCase().includes(s) ||
       a.telephone.includes(search) || (a.role_label ?? '').toLowerCase().includes(s);
     const matchRole = !filterRole || a.role === filterRole || a.role_label === filterRole;
-    return matchSearch && matchRole;
+    const matchQuota = filterQuotaGb === null || a.quota_gb === filterQuotaGb;
+    return matchSearch && matchRole && matchQuota;
   });
 
   const isDefaultAgentName = (nom: string, prenom: string) => {
@@ -190,7 +193,7 @@ export default function AgentsPage() {
       <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={handleFileChange}/>
 
       {/* Header */}
-      <div className="flex items-start justify-between gap-3">
+      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
         <div>
           <h1 className="text-xl md:text-2xl font-bold text-gray-900">Agents</h1>
           <div className="flex items-center gap-3 mt-0.5">
@@ -203,9 +206,9 @@ export default function AgentsPage() {
             )}
           </div>
         </div>
-        <div className="flex gap-2">
+        <div className="grid grid-cols-2 sm:flex gap-2 w-full sm:w-auto">
           {!isViewer && (
-            <Button variant="primary" size="sm" onClick={openCreate}>
+            <Button variant="primary" size="sm" onClick={openCreate} className="w-full sm:w-auto col-span-2 sm:col-span-1">
               <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
               </svg>
@@ -213,14 +216,14 @@ export default function AgentsPage() {
               <span className="sm:hidden">Ajouter</span>
             </Button>
           )}
-          <Button variant="secondary" size="sm" onClick={exportExcel} disabled={filtered.length === 0 || isViewer}>
+          <Button variant="secondary" size="sm" onClick={exportExcel} disabled={filtered.length === 0 || isViewer} className="w-full sm:w-auto">
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
             </svg>
             <span className="hidden sm:inline">Exporter Excel</span>
             <span className="sm:hidden">Export</span>
           </Button>
-          <Button variant="secondary" size="sm" onClick={() => fileRef.current?.click()} disabled={isViewer}>
+          <Button variant="secondary" size="sm" onClick={() => fileRef.current?.click()} disabled={isViewer} className="w-full sm:w-auto">
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3 3m0 0l3-3m-3 3V10"/>
             </svg>
@@ -254,15 +257,26 @@ export default function AgentsPage() {
       </Card>
 
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        {Object.entries(quotaGroups).sort((a, b) => parseFloat(a[0]) - parseFloat(b[0])).slice(0, 4).map(([quota, count]) => (
-          <Card key={quota} className="p-3 md:p-4">
+        {Object.entries(quotaGroups).sort((a, b) => parseFloat(a[0]) - parseFloat(b[0])).map(([quota, count]) => {
+          const gb = parseFloat(String(quota).replace('GB', ''));
+          const active = filterQuotaGb !== null && gb === filterQuotaGb;
+          return (
+          <button
+            key={quota}
+            type="button"
+            onClick={() => setFilterQuotaGb(prev => (prev === gb ? null : gb))}
+            className="text-left"
+          >
+            <Card className={clsx('p-3 md:p-4 transition-all', active ? 'ring-2 ring-indigo-500 bg-indigo-50/40' : 'hover:bg-gray-50')}>
             <div className="flex items-center justify-between">
               <span className="text-xs font-semibold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded-full">{quota}</span>
               <span className="text-lg md:text-xl font-bold text-gray-900">{count}</span>
             </div>
             <p className="text-xs text-gray-500 mt-1.5">agents</p>
-          </Card>
-        ))}
+            </Card>
+          </button>
+          );
+        })}
       </div>
 
       {/* Filtres */}
