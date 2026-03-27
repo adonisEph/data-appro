@@ -34,6 +34,7 @@ export default function AgentsPage() {
   const [search, setSearch]               = useState('');
   const [filterRole, setFilterRole]       = useState('');
   const [filterQuotaGb, setFilterQuotaGb] = useState<number | null>(null);
+  const [showAllQuotas, setShowAllQuotas] = useState(false);
 
   // Agents avec refetch auto
   const { data, isLoading, dataUpdatedAt } = useQuery({
@@ -184,7 +185,9 @@ export default function AgentsPage() {
     return acc;
   }, {} as Record<string, number>);
 
-  const budgetTotal = agents.reduce((sum, a) => sum + (a.prix_cfa ?? 0), 0);
+  const budgetTotal = filtered.reduce((sum, a) => sum + (a.prix_cfa ?? 0), 0);
+  const quotaEntries = Object.entries(quotaGroups).sort((a, b) => parseFloat(a[0]) - parseFloat(b[0]));
+  const quotaEntriesShown = showAllQuotas ? quotaEntries : quotaEntries.slice(0, 4);
 
   const lastUpdated = dataUpdatedAt ? new Date(dataUpdatedAt) : null;
 
@@ -256,8 +259,39 @@ export default function AgentsPage() {
         <p className="text-xs text-gray-400 mt-1">Somme des prix CFA de tous les agents actifs</p>
       </Card>
 
+      <div className="flex items-center justify-between gap-3">
+        <div className="text-xs text-gray-500">
+          {filterQuotaGb !== null ? (
+            <span>
+              Filtre quota: <span className="font-semibold text-gray-800">{filterQuotaGb} GB</span>
+            </span>
+          ) : (
+            <span>Tous les quotas</span>
+          )}
+        </div>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={() => { setFilterQuotaGb(null); setShowAllQuotas(false); }}
+            disabled={filterQuotaGb === null}
+          >
+            Tout afficher
+          </Button>
+          {quotaEntries.length > 4 && (
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => setShowAllQuotas(v => !v)}
+            >
+              {showAllQuotas ? 'Réduire' : 'Voir plus'}
+            </Button>
+          )}
+        </div>
+      </div>
+
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        {Object.entries(quotaGroups).sort((a, b) => parseFloat(a[0]) - parseFloat(b[0])).map(([quota, count]) => {
+        {quotaEntriesShown.map(([quota, count]) => {
           const gb = parseFloat(String(quota).replace('GB', ''));
           const active = filterQuotaGb !== null && gb === filterQuotaGb;
           return (
