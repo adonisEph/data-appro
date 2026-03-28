@@ -372,6 +372,48 @@ eventsRouter.get('/', async c => {
 
 api.route('/events', eventsRouter);
 
+const auditLogsRouter = new Hono<AppEnv>();
+auditLogsRouter.use('*', authMiddleware);
+
+auditLogsRouter.get('/', async c => {
+  const q = c.req.query();
+  const from = q.from ? String(q.from) : null;
+  const to = q.to ? String(q.to) : null;
+  const email = q.email ? String(q.email).trim() : null;
+  const action = q.action ? String(q.action).trim() : null;
+  const search = q.q ? String(q.q).trim() : null;
+  const limit = Math.min(200, Math.max(1, q.limit ? Number(q.limit) : 50));
+  const offset = Math.max(0, q.offset ? Number(q.offset) : 0);
+
+  let sql =
+    `SELECT l.id, l.campagne_id, l.agent_id, l.responsable_id, l.action, l.details, l.ip_address, l.created_at,
+            r.email AS responsable_email,
+            a.nom AS agent_nom, a.prenom AS agent_prenom, a.telephone AS agent_telephone
+     FROM audit_logs l
+     LEFT JOIN responsables r ON r.id = l.responsable_id
+     LEFT JOIN agents a ON a.id = l.agent_id
+     WHERE 1=1`;
+  const params: unknown[] = [];
+
+  if (from) { sql += ' AND l.created_at >= ?'; params.push(from); }
+  if (to) { sql += ' AND l.created_at <= ?'; params.push(to); }
+  if (email) { sql += ' AND r.email LIKE ?'; params.push(`%${email}%`); }
+  if (action) { sql += ' AND l.action = ?'; params.push(action); }
+  if (search) {
+    sql += ' AND (COALESCE(l.action,\'\') LIKE ? OR COALESCE(l.details,\'\') LIKE ? OR COALESCE(r.email,\'\') LIKE ?)';
+    const pat = `%${search}%`;
+    params.push(pat, pat, pat);
+  }
+
+  sql += ' ORDER BY l.id DESC LIMIT ? OFFSET ?';
+  params.push(limit, offset);
+
+  const { results } = await c.env.DB.prepare(sql).bind(...params).all();
+  return c.json({ logs: results ?? [], limit, offset });
+});
+
+api.route('/audit-logs', auditLogsRouter);
+
 // ══════════════════════════════════════════════════════════
 // SESSIONS (présence) — heartbeat + listing Super Admin
 // ══════════════════════════════════════════════════════════

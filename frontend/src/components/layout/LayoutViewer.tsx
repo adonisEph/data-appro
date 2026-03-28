@@ -3,8 +3,9 @@ import { useEffect, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '../../hooks/useAuth';
 import { usePWA } from '../../hooks/usePWA';
-import { agentsApi, eventsApi, sessionsApi } from '../../lib/api';
+import { agentsApi, auditLogsApi, eventsApi, sessionsApi } from '../../lib/api';
 import { useToast } from '../ui/Toast';
+import * as XLSX from 'xlsx';
 
 function safeJsonParse<T>(value: unknown): T | null {
   if (typeof value !== 'string') return null;
@@ -71,6 +72,14 @@ export function LayoutViewer() {
   const notificationsRef = useRef<Array<{ id: number; title: string; message?: string; created_at: string; action: string }>>([]);
   const unreadIdsRef = useRef<Set<number>>(new Set());
   const audioCtxRef = useRef<AudioContext | null>(null);
+  const journalPanelRef = useRef<HTMLDivElement | null>(null);
+  const journalOpenRef = useRef(false);
+
+  const [journalVersion, setJournalVersion] = useState(0);
+  const [journalFilters, setJournalFilters] = useState<{ from?: string; to?: string; email?: string; action?: string; q?: string; limit?: number }>({ limit: 50 });
+  const [journalOffset, setJournalOffset] = useState(0);
+  const [journalLoading, setJournalLoading] = useState(false);
+  const [journalLogs, setJournalLogs] = useState<Array<{ id: number; campagne_id: number | null; agent_id: number | null; responsable_id: number | null; action: string; details: string | null; ip_address: string | null; created_at: string; responsable_email?: string | null; agent_nom?: string | null; agent_prenom?: string | null; agent_telephone?: string | null }>>([]);
 
   const playNotifSound = async () => {
     try {
@@ -97,6 +106,78 @@ export function LayoutViewer() {
       osc.stop(t0 + 0.2);
     } catch {
       /* ignore */
+    }
+  };
+
+  const toSqliteDateTime = (v: string) => {
+    const s = String(v || '').trim();
+    if (!s) return undefined;
+    return s.replace('T', ' ') + ':00';
+  };
+
+  const runJournalSearch = async (opts?: { resetOffset?: boolean }) => {
+    const resetOffset = opts?.resetOffset ?? false;
+    setJournalLoading(true);
+    try {
+      const offset = resetOffset ? 0 : journalOffset;
+      const res = await auditLogsApi.list({
+        from: toSqliteDateTime(journalFilters.from ?? ''),
+        to: toSqliteDateTime(journalFilters.to ?? ''),
+        email: journalFilters.email,
+        action: journalFilters.action,
+        q: journalFilters.q,
+        limit: journalFilters.limit,
+        offset,
+      });
+      setJournalLogs(res.logs ?? []);
+      if (resetOffset) setJournalOffset(0);
+    } catch (err) {
+      toast.error('Journal', err instanceof Error ? err.message : 'Erreur');
+    } finally {
+      setJournalLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!journalOpenRef.current) return;
+    runJournalSearch();
+  }, [journalOffset]);
+
+  const exportJournalXlsx = async () => {
+    setJournalLoading(true);
+    try {
+      const res = await auditLogsApi.list({
+        from: toSqliteDateTime(journalFilters.from ?? ''),
+        to: toSqliteDateTime(journalFilters.to ?? ''),
+        email: journalFilters.email,
+        action: journalFilters.action,
+        q: journalFilters.q,
+        limit: 200,
+        offset: 0,
+      });
+      const logs = res.logs ?? [];
+      const rows = logs.map(l => {
+        const agent = [l.agent_prenom, l.agent_nom].filter(Boolean).join(' ').trim();
+        return {
+          id: l.id,
+          date: l.created_at,
+          action: l.action,
+          responsable: l.responsable_email ?? '',
+          agent: agent || (l.agent_id ? `Agent #${l.agent_id}` : ''),
+          telephone: l.agent_telephone ?? '',
+          details: l.details ?? '',
+          ip: l.ip_address ?? '',
+        };
+      });
+      const ws = XLSX.utils.json_to_sheet(rows);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'Journal');
+      const ts = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-');
+      XLSX.writeFile(wb, `journal-actions-${ts}.xlsx`);
+    } catch (err) {
+      toast.error('Export Excel', err instanceof Error ? err.message : 'Erreur');
+    } finally {
+      setJournalLoading(false);
     }
   };
 
@@ -407,8 +488,161 @@ export function LayoutViewer() {
                   </div>
                 )}
               </div>
+
+              <div className="relative" ref={journalPanelRef}>
+                <button
+                  onClick={() => {
+                    journalOpenRef.current = !journalOpenRef.current;
+                    if (journalOpenRef.current) {
+                      setJournalOffset(0);
+                      runJournalSearch({ resetOffset: true });
+                    }
+                    setJournalVersion(v => v + 1);
+                  }}
+                  title="Journal"
+                  className="text-gray-400 hover:text-gray-700 transition-colors p-1"
+                >
+                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M9 12h6m-6 4h6m2 4H7a2 2 0 01-2-2V6a2 2 0 012-2h7l5 5v11a2 2 0 01-2 2z" />
+                  </svg>
+                </button>
+
+                {journalOpenRef.current && (
+                  <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4">
+                    <button
+                      className="absolute inset-0 bg-black/40"
+                      onClick={() => {
+                        journalOpenRef.current = false;
+                        setJournalVersion(v => v + 1);
+                      }}
+                      aria-label="Fermer"
+                    />
+                    <div className="relative w-full max-w-4xl bg-white border border-gray-200 rounded-2xl shadow-xl overflow-hidden">
+                      <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
+                        <div>
+                          <p className="text-sm font-semibold text-gray-800">Journal des actions</p>
+                          <p className="text-xs text-gray-400">Historique des actions des responsables</p>
+                        </div>
+                        <button
+                          onClick={() => {
+                            journalOpenRef.current = false;
+                            setJournalVersion(v => v + 1);
+                          }}
+                          className="text-gray-400 hover:text-gray-700 p-1" title="Fermer"
+                        >
+                          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                          </svg>
+                        </button>
+                      </div>
+
+                      <div className="px-4 py-3 border-b border-gray-100">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2">
+                          <input
+                            type="datetime-local"
+                            value={journalFilters.from ?? ''}
+                            onChange={e => setJournalFilters(f => ({ ...f, from: e.target.value }))}
+                            className="border border-gray-200 rounded-lg px-3 py-2 text-xs"
+                            placeholder="Du"
+                          />
+                          <input
+                            type="datetime-local"
+                            value={journalFilters.to ?? ''}
+                            onChange={e => setJournalFilters(f => ({ ...f, to: e.target.value }))}
+                            className="border border-gray-200 rounded-lg px-3 py-2 text-xs"
+                            placeholder="Au"
+                          />
+                          <input
+                            value={journalFilters.email ?? ''}
+                            onChange={e => setJournalFilters(f => ({ ...f, email: e.target.value }))}
+                            className="border border-gray-200 rounded-lg px-3 py-2 text-xs"
+                            placeholder="Email responsable"
+                          />
+                          <input
+                            value={journalFilters.action ?? ''}
+                            onChange={e => setJournalFilters(f => ({ ...f, action: e.target.value }))}
+                            className="border border-gray-200 rounded-lg px-3 py-2 text-xs"
+                            placeholder="Action (ex: AGENT_CREATED)"
+                          />
+                          <input
+                            value={journalFilters.q ?? ''}
+                            onChange={e => setJournalFilters(f => ({ ...f, q: e.target.value }))}
+                            className="border border-gray-200 rounded-lg px-3 py-2 text-xs"
+                            placeholder="Recherche"
+                          />
+                        </div>
+
+                        <div className="flex items-center justify-between gap-2 pt-3">
+                          <div className="flex items-center gap-2">
+                            <button
+                              onClick={() => runJournalSearch({ resetOffset: true })}
+                              disabled={journalLoading}
+                              className="px-3 py-2 text-xs font-semibold rounded-lg bg-brand-600 text-white hover:bg-brand-700 disabled:opacity-60"
+                            >
+                              {journalLoading ? 'Chargement…' : 'Rechercher'}
+                            </button>
+                            <button
+                              onClick={exportJournalXlsx}
+                              disabled={journalLoading}
+                              className="px-3 py-2 text-xs font-semibold rounded-lg bg-gray-900 text-white hover:bg-black disabled:opacity-60"
+                            >
+                              Export Excel
+                            </button>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <button
+                              onClick={() => setJournalOffset(o => Math.max(0, o - (journalFilters.limit ?? 50)))}
+                              disabled={journalLoading || journalOffset === 0}
+                              className="px-3 py-2 text-xs font-semibold rounded-lg bg-white border border-gray-200 text-gray-700 hover:bg-gray-50 disabled:opacity-60"
+                            >
+                              Précédent
+                            </button>
+                            <button
+                              onClick={() => setJournalOffset(o => o + (journalFilters.limit ?? 50))}
+                              disabled={journalLoading || journalLogs.length < (journalFilters.limit ?? 50)}
+                              className="px-3 py-2 text-xs font-semibold rounded-lg bg-white border border-gray-200 text-gray-700 hover:bg-gray-50 disabled:opacity-60"
+                            >
+                              Suivant
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="max-h-[70vh] overflow-y-auto">
+                        {journalLogs.length === 0 ? (
+                          <p className="text-sm text-gray-400 p-4">Aucune entrée</p>
+                        ) : (
+                          <div className="divide-y divide-gray-100">
+                            {journalLogs.map(l => (
+                              <div key={l.id} className="px-4 py-3">
+                                <div className="flex items-start justify-between gap-3">
+                                  <div className="min-w-0">
+                                    <p className="text-xs font-semibold text-gray-900 truncate">
+                                      {fmtDefaultTitle(l.action)}
+                                      {l.responsable_email ? (
+                                        <span className="ml-2 text-[10px] text-gray-500 bg-gray-100 px-2 py-0.5 rounded-full">{l.responsable_email}</span>
+                                      ) : null}
+                                    </p>
+                                    <p className="text-xs text-gray-500 truncate">{[l.agent_prenom, l.agent_nom].filter(Boolean).join(' ').trim() || (l.agent_id ? `Agent #${l.agent_id}` : '—')}{l.agent_telephone ? ` · ${l.agent_telephone}` : ''}</p>
+                                    {l.details ? <p className="text-xs text-gray-400 mt-0.5 truncate">{l.details}</p> : null}
+                                  </div>
+                                  <div className="text-right shrink-0">
+                                    <p className="text-[10px] text-gray-400">#{l.id}</p>
+                                    <p className="text-[10px] text-gray-400">{new Date(l.created_at).toLocaleString('fr-FR')}</p>
+                                  </div>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
               {/* force rerender */}
               <span className="hidden">{notifVersion}</span>
+              <span className="hidden">{journalVersion}</span>
               <div className="w-7 h-7 bg-gray-100 rounded-full flex items-center justify-center text-xs font-bold text-gray-600">
                 {user?.prenom?.[0]?.toUpperCase()}{user?.nom?.[0]?.toUpperCase()}
               </div>

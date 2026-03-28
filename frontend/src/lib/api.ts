@@ -136,3 +136,18 @@ export const sessionsApi = {
     );
   },
 };
+
+export const auditLogsApi = {
+  list: (params: { from?: string; to?: string; email?: string; action?: string; q?: string; limit?: number; offset?: number }) => {
+    const qs = new URLSearchParams(
+      Object.fromEntries(
+        Object.entries(params)
+          .filter(([, v]) => v !== undefined && v !== null && String(v).trim() !== '')
+          .map(([k, v]) => [k, String(v)])
+      )
+    ).toString();
+    return request<{ logs: Array<{ id: number; campagne_id: number | null; agent_id: number | null; responsable_id: number | null; action: string; details: string | null; ip_address: string | null; created_at: string; responsable_email?: string | null; agent_nom?: string | null; agent_prenom?: string | null; agent_telephone?: string | null }>; limit: number; offset: number }>(
+      `/audit-logs${qs ? '?' + qs : ''}`
+    );
+  },
+};
