@@ -57,6 +57,72 @@ function fmtFallbackMessage(
   return undefined;
 }
 
+function fmtJournalMessage(action: string, details: Record<string, unknown> | null) {
+  if (!details) return undefined;
+
+  if (action === 'AGENT_CREATED') {
+    const d = details as unknown as { quota_gb?: number; role?: string; role_label?: string | null; forfait_label?: string | null } | null;
+    const parts: string[] = [];
+    if (typeof d?.quota_gb === 'number') parts.push(`Quota: ${d.quota_gb} GB`);
+    if (typeof d?.role_label === 'string' && d.role_label.trim()) parts.push(`Rôle: ${d.role_label.trim()}`);
+    else if (typeof d?.role === 'string' && d.role.trim()) parts.push(`Rôle: ${d.role.trim()}`);
+    if (typeof d?.forfait_label === 'string' && d.forfait_label.trim()) parts.push(`Forfait: ${d.forfait_label.trim()}`);
+    return parts.length ? parts.join(' · ') : undefined;
+  }
+
+  if (action === 'AGENT_UPDATED' || action === 'AGENT_QUOTA_CHANGED') {
+    const d = details as unknown as {
+      before?: { nom?: string; prenom?: string; telephone?: string; quota_gb?: number };
+      after?: { nom?: string; prenom?: string; telephone?: string; quota_gb?: number };
+      updates?: { nom?: string; prenom?: string; telephone?: string; quota_gb?: number };
+    } | null;
+
+    const before = d?.before ?? undefined;
+    const after = d?.after ?? undefined;
+    const updates = d?.updates ?? undefined;
+    const parts: string[] = [];
+
+    const beforePrenom = typeof before?.prenom === 'string' ? before.prenom.trim() : undefined;
+    const afterPrenom = typeof after?.prenom === 'string' ? after.prenom.trim() : undefined;
+    const beforeNom = typeof before?.nom === 'string' ? before.nom.trim() : undefined;
+    const afterNom = typeof after?.nom === 'string' ? after.nom.trim() : undefined;
+    const beforeTel = typeof before?.telephone === 'string' ? before.telephone.trim() : undefined;
+    const afterTel = typeof after?.telephone === 'string' ? after.telephone.trim() : undefined;
+    const beforeQuota = typeof before?.quota_gb === 'number' ? before.quota_gb : undefined;
+    const afterQuota = typeof after?.quota_gb === 'number' ? after.quota_gb : undefined;
+
+    const prenomTouched = typeof updates?.prenom !== 'undefined' || (beforePrenom !== undefined && afterPrenom !== undefined && beforePrenom !== afterPrenom);
+    const nomTouched = typeof updates?.nom !== 'undefined' || (beforeNom !== undefined && afterNom !== undefined && beforeNom !== afterNom);
+    const telTouched = typeof updates?.telephone !== 'undefined' || (beforeTel !== undefined && afterTel !== undefined && beforeTel !== afterTel);
+    const quotaTouched = typeof updates?.quota_gb !== 'undefined' || (beforeQuota !== undefined && afterQuota !== undefined && beforeQuota !== afterQuota);
+
+    if (prenomTouched) {
+      if (beforePrenom !== undefined && afterPrenom !== undefined && beforePrenom !== afterPrenom) parts.push(`Prénom: ${beforePrenom} → ${afterPrenom}`);
+      else if (afterPrenom !== undefined) parts.push(`Prénom: ${afterPrenom}`);
+      else if (beforePrenom !== undefined) parts.push(`Prénom: ${beforePrenom}`);
+    }
+    if (nomTouched) {
+      if (beforeNom !== undefined && afterNom !== undefined && beforeNom !== afterNom) parts.push(`Nom: ${beforeNom} → ${afterNom}`);
+      else if (afterNom !== undefined) parts.push(`Nom: ${afterNom}`);
+      else if (beforeNom !== undefined) parts.push(`Nom: ${beforeNom}`);
+    }
+    if (telTouched) {
+      if (beforeTel !== undefined && afterTel !== undefined && beforeTel !== afterTel) parts.push(`Téléphone: ${beforeTel} → ${afterTel}`);
+      else if (afterTel !== undefined) parts.push(`Téléphone: ${afterTel}`);
+      else if (beforeTel !== undefined) parts.push(`Téléphone: ${beforeTel}`);
+    }
+    if (quotaTouched) {
+      if (beforeQuota !== undefined && afterQuota !== undefined && beforeQuota !== afterQuota) parts.push(`Quota (GB): ${beforeQuota} → ${afterQuota}`);
+      else if (afterQuota !== undefined) parts.push(`Quota (GB): ${afterQuota}`);
+      else if (beforeQuota !== undefined) parts.push(`Quota (GB): ${beforeQuota}`);
+    }
+
+    return parts.length ? parts.join(' · ') : undefined;
+  }
+
+  return undefined;
+}
+
 export function LayoutViewer() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
@@ -158,6 +224,8 @@ export function LayoutViewer() {
       const logs = res.logs ?? [];
       const rows = logs.map(l => {
         const agent = [l.agent_prenom, l.agent_nom].filter(Boolean).join(' ').trim();
+        const details = safeJsonParse<Record<string, unknown>>(l.details) ?? null;
+        const resume = fmtJournalMessage(l.action, details) ?? fmtFallbackMessage(l.action, details, l.details, l.agent_id ?? null, l.campagne_id ?? null) ?? '';
         return {
           id: l.id,
           date: l.created_at,
@@ -165,7 +233,8 @@ export function LayoutViewer() {
           responsable: l.responsable_email ?? '',
           agent: agent || (l.agent_id ? `Agent #${l.agent_id}` : ''),
           telephone: l.agent_telephone ?? '',
-          details: l.details ?? '',
+          resume,
+          details: details ? JSON.stringify(details) : (l.details ?? ''),
           ip: l.ip_address ?? '',
         };
       });
@@ -404,7 +473,7 @@ export function LayoutViewer() {
             </div>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 min-w-0">
             {canInstall && (
               <button onClick={install}
                 className="hidden sm:flex items-center gap-1.5 text-xs text-brand-600 hover:text-brand-800 font-medium">
@@ -414,7 +483,7 @@ export function LayoutViewer() {
                 Installer
               </button>
             )}
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 min-w-0">
               <div className="relative" ref={notifPanelRef}>
                 <button
                   onClick={() => {
@@ -613,7 +682,11 @@ export function LayoutViewer() {
                           <p className="text-sm text-gray-400 p-4">Aucune entrée</p>
                         ) : (
                           <div className="divide-y divide-gray-100">
-                            {journalLogs.map(l => (
+                            {journalLogs.map(l => {
+                              const details = safeJsonParse<Record<string, unknown>>(l.details) ?? null;
+                              const agent = [l.agent_prenom, l.agent_nom].filter(Boolean).join(' ').trim();
+                              const msg = fmtJournalMessage(l.action, details) ?? fmtFallbackMessage(l.action, details, l.details, l.agent_id ?? null, l.campagne_id ?? null);
+                              return (
                               <div key={l.id} className="px-4 py-3">
                                 <div className="flex items-start justify-between gap-3">
                                   <div className="min-w-0">
@@ -623,8 +696,8 @@ export function LayoutViewer() {
                                         <span className="ml-2 text-[10px] text-gray-500 bg-gray-100 px-2 py-0.5 rounded-full">{l.responsable_email}</span>
                                       ) : null}
                                     </p>
-                                    <p className="text-xs text-gray-500 truncate">{[l.agent_prenom, l.agent_nom].filter(Boolean).join(' ').trim() || (l.agent_id ? `Agent #${l.agent_id}` : '—')}{l.agent_telephone ? ` · ${l.agent_telephone}` : ''}</p>
-                                    {l.details ? <p className="text-xs text-gray-400 mt-0.5 truncate">{l.details}</p> : null}
+                                    <p className="text-xs text-gray-500 truncate">{agent || (l.agent_id ? `Agent #${l.agent_id}` : '—')}{l.agent_telephone ? ` · ${l.agent_telephone}` : ''}</p>
+                                    {msg ? <p className="text-xs text-gray-400 mt-0.5">{msg}</p> : null}
                                   </div>
                                   <div className="text-right shrink-0">
                                     <p className="text-[10px] text-gray-400">#{l.id}</p>
@@ -632,7 +705,8 @@ export function LayoutViewer() {
                                   </div>
                                 </div>
                               </div>
-                            ))}
+                              );
+                            })}
                           </div>
                         )}
                       </div>
@@ -646,7 +720,7 @@ export function LayoutViewer() {
               <div className="w-7 h-7 bg-gray-100 rounded-full flex items-center justify-center text-xs font-bold text-gray-600">
                 {user?.prenom?.[0]?.toUpperCase()}{user?.nom?.[0]?.toUpperCase()}
               </div>
-              <span className="hidden sm:block text-xs text-gray-600">{user?.prenom} {user?.nom}</span>
+              <span className="hidden sm:block text-xs text-gray-600 truncate max-w-[180px]">{user?.prenom} {user?.nom}</span>
               <button onClick={() => { logout(); navigate('/login'); }}
                 className="text-gray-400 hover:text-red-500 transition-colors p-1" title="Déconnexion">
                 <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">

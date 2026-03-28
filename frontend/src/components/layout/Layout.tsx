@@ -59,6 +59,72 @@ function fmtFallbackMessage(
   return undefined;
 }
 
+function fmtJournalMessage(action: string, details: Record<string, unknown> | null) {
+  if (!details) return undefined;
+
+  if (action === 'AGENT_CREATED') {
+    const d = details as unknown as { quota_gb?: number; role?: string; role_label?: string | null; forfait_label?: string | null } | null;
+    const parts: string[] = [];
+    if (typeof d?.quota_gb === 'number') parts.push(`Quota: ${d.quota_gb} GB`);
+    if (typeof d?.role_label === 'string' && d.role_label.trim()) parts.push(`Rôle: ${d.role_label.trim()}`);
+    else if (typeof d?.role === 'string' && d.role.trim()) parts.push(`Rôle: ${d.role.trim()}`);
+    if (typeof d?.forfait_label === 'string' && d.forfait_label.trim()) parts.push(`Forfait: ${d.forfait_label.trim()}`);
+    return parts.length ? parts.join(' · ') : undefined;
+  }
+
+  if (action === 'AGENT_UPDATED' || action === 'AGENT_QUOTA_CHANGED') {
+    const d = details as unknown as {
+      before?: { nom?: string; prenom?: string; telephone?: string; quota_gb?: number };
+      after?: { nom?: string; prenom?: string; telephone?: string; quota_gb?: number };
+      updates?: { nom?: string; prenom?: string; telephone?: string; quota_gb?: number };
+    } | null;
+
+    const before = d?.before ?? undefined;
+    const after = d?.after ?? undefined;
+    const updates = d?.updates ?? undefined;
+    const parts: string[] = [];
+
+    const beforePrenom = typeof before?.prenom === 'string' ? before.prenom.trim() : undefined;
+    const afterPrenom = typeof after?.prenom === 'string' ? after.prenom.trim() : undefined;
+    const beforeNom = typeof before?.nom === 'string' ? before.nom.trim() : undefined;
+    const afterNom = typeof after?.nom === 'string' ? after.nom.trim() : undefined;
+    const beforeTel = typeof before?.telephone === 'string' ? before.telephone.trim() : undefined;
+    const afterTel = typeof after?.telephone === 'string' ? after.telephone.trim() : undefined;
+    const beforeQuota = typeof before?.quota_gb === 'number' ? before.quota_gb : undefined;
+    const afterQuota = typeof after?.quota_gb === 'number' ? after.quota_gb : undefined;
+
+    const prenomTouched = typeof updates?.prenom !== 'undefined' || (beforePrenom !== undefined && afterPrenom !== undefined && beforePrenom !== afterPrenom);
+    const nomTouched = typeof updates?.nom !== 'undefined' || (beforeNom !== undefined && afterNom !== undefined && beforeNom !== afterNom);
+    const telTouched = typeof updates?.telephone !== 'undefined' || (beforeTel !== undefined && afterTel !== undefined && beforeTel !== afterTel);
+    const quotaTouched = typeof updates?.quota_gb !== 'undefined' || (beforeQuota !== undefined && afterQuota !== undefined && beforeQuota !== afterQuota);
+
+    if (prenomTouched) {
+      if (beforePrenom !== undefined && afterPrenom !== undefined && beforePrenom !== afterPrenom) parts.push(`Prénom: ${beforePrenom} → ${afterPrenom}`);
+      else if (afterPrenom !== undefined) parts.push(`Prénom: ${afterPrenom}`);
+      else if (beforePrenom !== undefined) parts.push(`Prénom: ${beforePrenom}`);
+    }
+    if (nomTouched) {
+      if (beforeNom !== undefined && afterNom !== undefined && beforeNom !== afterNom) parts.push(`Nom: ${beforeNom} → ${afterNom}`);
+      else if (afterNom !== undefined) parts.push(`Nom: ${afterNom}`);
+      else if (beforeNom !== undefined) parts.push(`Nom: ${beforeNom}`);
+    }
+    if (telTouched) {
+      if (beforeTel !== undefined && afterTel !== undefined && beforeTel !== afterTel) parts.push(`Téléphone: ${beforeTel} → ${afterTel}`);
+      else if (afterTel !== undefined) parts.push(`Téléphone: ${afterTel}`);
+      else if (beforeTel !== undefined) parts.push(`Téléphone: ${beforeTel}`);
+    }
+    if (quotaTouched) {
+      if (beforeQuota !== undefined && afterQuota !== undefined && beforeQuota !== afterQuota) parts.push(`Quota (GB): ${beforeQuota} → ${afterQuota}`);
+      else if (afterQuota !== undefined) parts.push(`Quota (GB): ${afterQuota}`);
+      else if (beforeQuota !== undefined) parts.push(`Quota (GB): ${beforeQuota}`);
+    }
+
+    return parts.length ? parts.join(' · ') : undefined;
+  }
+
+  return undefined;
+}
+
 const NAV = [
   {
     to: '/', label: 'Dashboard', exact: true,
@@ -190,6 +256,7 @@ export function Layout() {
       const rows = logs.map(l => {
         const details = safeJsonParse<Record<string, unknown>>(l.details) ?? null;
         const agent = [l.agent_prenom, l.agent_nom].filter(Boolean).join(' ').trim();
+        const resume = fmtJournalMessage(l.action, details) ?? fmtFallbackMessage(l.action, details, l.details, l.agent_id ?? null, l.campagne_id ?? null) ?? '';
         return {
           id: l.id,
           date: l.created_at,
@@ -197,6 +264,7 @@ export function Layout() {
           responsable: l.responsable_email ?? '',
           agent: agent || (l.agent_id ? `Agent #${l.agent_id}` : ''),
           telephone: l.agent_telephone ?? '',
+          resume,
           details: details ? JSON.stringify(details) : (l.details ?? ''),
           ip: l.ip_address ?? '',
         };
@@ -582,44 +650,48 @@ export function Layout() {
 
       {/* User */}
       <div className="p-3 border-t border-gray-100 shrink-0">
-        <div className="flex items-center gap-3 px-2 py-2">
-          <div className={clsx(
-            'w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold shrink-0',
-            isSuperAdmin ? 'bg-amber-100 text-amber-700' : 'bg-brand-100 text-brand-700'
-          )}>
-            {user?.prenom?.[0]?.toUpperCase()}{user?.nom?.[0]?.toUpperCase()}
+        <div className="px-2 py-2">
+          <div className="flex items-center gap-3">
+            <div className={clsx(
+              'w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold shrink-0',
+              isSuperAdmin ? 'bg-amber-100 text-amber-700' : 'bg-brand-100 text-brand-700'
+            )}>
+              {user?.prenom?.[0]?.toUpperCase()}{user?.nom?.[0]?.toUpperCase()}
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-xs font-semibold text-gray-900 truncate">
+                {user?.prenom} {user?.nom}
+                {isSuperAdmin && <span className="ml-1 text-amber-500">★</span>}
+              </p>
+              <p className="text-[10px] text-gray-400 truncate">{user?.email}</p>
+            </div>
           </div>
-          <div className="flex-1 min-w-0">
-            <p className="text-xs font-semibold text-gray-900 truncate">
-              {user?.prenom} {user?.nom}
-              {isSuperAdmin && <span className="ml-1 text-amber-500">★</span>}
-            </p>
-            <p className="text-[10px] text-gray-400 truncate">{user?.email}</p>
-          </div>
-          <div className="relative" ref={notifPanelRef}>
-            <button
-              onClick={() => {
-                setNotifOpen(o => !o);
-                if (unreadIds.size > 0) {
-                  const uid = user?.email ? String(user.email) : 'anon';
-                  const kUnread = `events_unread_ids:${uid}`;
-                  const next = new Set<number>();
-                  setUnreadIds(next);
-                  try { localStorage.setItem(kUnread, JSON.stringify([])); } catch { /* ignore */ }
-                }
-              }}
-              title="Notifications"
-              className="relative text-gray-400 hover:text-gray-700 transition-colors shrink-0 p-1"
-            >
-              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6 6 0 10-12 0v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0a3 3 0 11-6 0m6 0H9" />
-              </svg>
-              {unreadIds.size > 0 && (
-                <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 rounded-full bg-red-500 text-white text-[10px] font-bold flex items-center justify-center">
-                  {unreadIds.size > 99 ? '99+' : unreadIds.size}
-                </span>
-              )}
-            </button>
+
+          <div className="flex items-center justify-end gap-2 pt-2">
+            <div className="relative" ref={notifPanelRef}>
+              <button
+                onClick={() => {
+                  setNotifOpen(o => !o);
+                  if (unreadIds.size > 0) {
+                    const uid = user?.email ? String(user.email) : 'anon';
+                    const kUnread = `events_unread_ids:${uid}`;
+                    const next = new Set<number>();
+                    setUnreadIds(next);
+                    try { localStorage.setItem(kUnread, JSON.stringify([])); } catch { /* ignore */ }
+                  }
+                }}
+                title="Notifications"
+                className="relative text-gray-400 hover:text-gray-700 transition-colors shrink-0 p-1"
+              >
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6 6 0 10-12 0v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0a3 3 0 11-6 0m6 0H9" />
+                </svg>
+                {unreadIds.size > 0 && (
+                  <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 rounded-full bg-red-500 text-white text-[10px] font-bold flex items-center justify-center">
+                    {unreadIds.size > 99 ? '99+' : unreadIds.size}
+                  </span>
+                )}
+              </button>
 
             {notifOpen && (
               <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4">
@@ -657,17 +729,17 @@ export function Layout() {
             )}
           </div>
 
-          {isSuperAdmin && (
-            <div className="relative" ref={sessionPanelRef}>
-              <button
-                onClick={() => setSessionOpen(o => !o)}
-                title="Sessions"
-                className="text-gray-400 hover:text-gray-700 transition-colors shrink-0 p-1"
-              >
-                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
-                </svg>
-              </button>
+            {isSuperAdmin && (
+              <div className="relative" ref={sessionPanelRef}>
+                <button
+                  onClick={() => setSessionOpen(o => !o)}
+                  title="Sessions"
+                  className="text-gray-400 hover:text-gray-700 transition-colors shrink-0 p-1"
+                >
+                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
+                  </svg>
+                </button>
 
               {sessionOpen && (
                 <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4">
@@ -840,28 +912,28 @@ export function Layout() {
                   </div>
                 </div>
               )}
-            </div>
-          )}
+              </div>
+            )}
 
-          <div className="relative" ref={journalPanelRef}>
-            <button
-              onClick={() => {
-                setJournalOpen(o => {
-                  const next = !o;
-                  if (next) {
-                    setJournalOffset(0);
-                    runJournalSearch({ resetOffset: true });
-                  }
-                  return next;
-                });
-              }}
-              title="Journal"
-              className="text-gray-400 hover:text-gray-700 transition-colors shrink-0 p-1"
-            >
-              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M9 12h6m-6 4h6m2 4H7a2 2 0 01-2-2V6a2 2 0 012-2h7l5 5v11a2 2 0 01-2 2z" />
-              </svg>
-            </button>
+            <div className="relative" ref={journalPanelRef}>
+              <button
+                onClick={() => {
+                  setJournalOpen(o => {
+                    const next = !o;
+                    if (next) {
+                      setJournalOffset(0);
+                      runJournalSearch({ resetOffset: true });
+                    }
+                    return next;
+                  });
+                }}
+                title="Journal"
+                className="text-gray-400 hover:text-gray-700 transition-colors shrink-0 p-1"
+              >
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M9 12h6m-6 4h6m2 4H7a2 2 0 01-2-2V6a2 2 0 012-2h7l5 5v11a2 2 0 01-2 2z" />
+                </svg>
+              </button>
 
             {journalOpen && (
               <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4">
@@ -965,7 +1037,7 @@ export function Layout() {
                         {journalLogs.map(l => {
                           const details = safeJsonParse<Record<string, unknown>>(l.details) ?? null;
                           const agent = [l.agent_prenom, l.agent_nom].filter(Boolean).join(' ').trim();
-                          const msg = fmtFallbackMessage(l.action, details, l.details, l.agent_id ?? null, l.campagne_id ?? null);
+                          const msg = fmtJournalMessage(l.action, details) ?? fmtFallbackMessage(l.action, details, l.details, l.agent_id ?? null, l.campagne_id ?? null);
                           return (
                             <div key={l.id} className="px-4 py-3">
                               <div className="flex items-start justify-between gap-3">
@@ -993,13 +1065,15 @@ export function Layout() {
                 </div>
               </div>
             )}
+            </div>
+
+            <button onClick={handleLogout} title="Déconnexion"
+              className="text-gray-400 hover:text-red-500 transition-colors shrink-0 p-1">
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/>
+              </svg>
+            </button>
           </div>
-          <button onClick={handleLogout} title="Déconnexion"
-            className="text-gray-400 hover:text-red-500 transition-colors shrink-0 p-1">
-            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/>
-            </svg>
-          </button>
         </div>
       </div>
     </>

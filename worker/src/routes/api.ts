@@ -293,7 +293,7 @@ agentsRouter.put('/:id', noViewerMiddleware, async c => {
     prix_cfa?: number; forfait_label?: string; actif?: number;
   }>();
 
-  const before = await c.env.DB.prepare(`SELECT quota_gb FROM agents WHERE id = ?`).bind(id).first<{ quota_gb: number }>();
+  const before = await c.env.DB.prepare(`SELECT nom, prenom, telephone, quota_gb FROM agents WHERE id = ?`).bind(id).first<{ nom: string; prenom: string; telephone: string; quota_gb: number }>();
 
   const updates: string[] = []; const values: unknown[] = [];
   if (body.nom           !== undefined) { updates.push('nom = ?');           values.push(body.nom); }
@@ -323,7 +323,16 @@ agentsRouter.put('/:id', noViewerMiddleware, async c => {
     id,
     Number((user as JWTPayload).sub),
     quotaChanged ? 'AGENT_QUOTA_CHANGED' : 'AGENT_UPDATED',
-    JSON.stringify({ updates: body, before: { quota_gb: beforeQuota }, after: { quota_gb: afterQuota } })
+    JSON.stringify({
+      updates: body,
+      before: before ? { nom: before.nom, prenom: before.prenom, telephone: before.telephone, quota_gb: before.quota_gb } : { quota_gb: beforeQuota },
+      after: updated ? {
+        nom: (updated as { nom?: string } | null)?.nom,
+        prenom: (updated as { prenom?: string } | null)?.prenom,
+        telephone: (updated as { telephone?: string } | null)?.telephone,
+        quota_gb: (updated as { quota_gb?: number } | null)?.quota_gb,
+      } : { quota_gb: afterQuota },
+    })
   ).run();
 
   return c.json({ ok: true, agent: updated });
