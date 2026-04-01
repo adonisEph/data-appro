@@ -277,14 +277,13 @@ export function CampagneDetailPage() {
   const txByAgentId = new Map<number, typeof transactions[number]>();
   transactions.forEach(t => { txByAgentId.set(t.agent_id, t); });
 
-  const manualRows = (agentsData?.agents ?? [])
+  const manualRowsAll = (agentsData?.agents ?? [])
     .map(a => {
       const tx = txByAgentId.get(a.id);
       const statut = tx?.statut ?? 'en_attente';
       const montant = a.prix_cfa > 0 ? a.prix_cfa : 0;
       return { a, tx, statut, montant };
     })
-    .filter(row => !todoOnly || row.statut === 'en_attente')
     .sort((r1, r2) => {
       const k1 = manualSort === 'quota' ? r1.a.quota_gb : r1.montant;
       const k2 = manualSort === 'quota' ? r2.a.quota_gb : r2.montant;
@@ -292,13 +291,26 @@ export function CampagneDetailPage() {
       return manualSortDir === 'asc' ? d : -d;
     });
 
+  const manualRows = manualRowsAll.filter(row => !todoOnly || row.statut === 'en_attente');
+
   if (isLoading) return <div className="flex justify-center py-16"><Spinner size="lg" className="text-brand-600" /></div>;
   if (!campagne) return <div className="p-6 text-red-600">Campagne introuvable</div>;
+
+  const budgetTotal = campagne.budget_fcfa || 0;
+
+  const budgetRestantManuel = manualRowsAll
+    .filter(r => r.statut !== 'confirme')
+    .reduce((s, r) => s + (typeof r.montant === 'number' ? r.montant : 0), 0);
 
   const budgetConfirme = transactions
     .filter(t => t.statut === 'confirme')
     .reduce((s, t) => s + (typeof t.montant_fcfa === 'number' ? t.montant_fcfa : 0), 0);
-  const budgetRestant = Math.max(0, (campagne.budget_fcfa || 0) - budgetConfirme);
+
+  const budgetRestant = isManual
+    ? Math.min(budgetTotal, Math.max(0, budgetRestantManuel))
+    : Math.max(0, budgetTotal - budgetConfirme);
+
+  const budgetUtilise = Math.max(0, budgetTotal - budgetRestant);
 
   return (
     <div className="p-6 max-w-6xl mx-auto space-y-6">
@@ -345,7 +357,7 @@ export function CampagneDetailPage() {
         <Card className="p-4">
           <p className="text-xs text-gray-500 mb-1">Budget</p>
           <p className="text-lg font-bold text-gray-900">{fmtFCFA(budgetRestant)}</p>
-          <p className="text-[10px] text-gray-400">Utilisé: {fmtFCFA(budgetConfirme)} / {fmtFCFA(campagne.budget_fcfa)}</p>
+          <p className="text-[10px] text-gray-400">Utilisé: {fmtFCFA(budgetUtilise)} / {fmtFCFA(budgetTotal)}</p>
         </Card>
         <Card className="p-4">
           <p className="text-xs text-gray-500 mb-1">Option</p>
