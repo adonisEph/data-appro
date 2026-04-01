@@ -85,14 +85,24 @@ export function CampagnesPage() {
                     <CampagneBadge statut={c.statut} />
                   </div>
                   {(() => {
-                    const used = typeof (c as unknown as { budget_confirme_fcfa?: number }).budget_confirme_fcfa === 'number'
+                    const budgetTotal = Number(c.budget_fcfa || 0);
+                    const budgetRestantManuel = typeof (c as unknown as { budget_restant_manuel_fcfa?: number }).budget_restant_manuel_fcfa === 'number'
+                      ? Number((c as unknown as { budget_restant_manuel_fcfa?: number }).budget_restant_manuel_fcfa)
+                      : null;
+
+                    const usedAuto = typeof (c as unknown as { budget_confirme_fcfa?: number }).budget_confirme_fcfa === 'number'
                       ? Number((c as unknown as { budget_confirme_fcfa?: number }).budget_confirme_fcfa)
                       : 0;
-                    const restant = Math.max(0, Number(c.budget_fcfa || 0) - used);
+
+                    const restant = (c as unknown as { mode?: string }).mode === 'manuel' && budgetRestantManuel !== null
+                      ? Math.min(budgetTotal, Math.max(0, budgetRestantManuel))
+                      : Math.max(0, budgetTotal - usedAuto);
+
+                    const used = Math.max(0, budgetTotal - restant);
                     return (
                       <div className="text-right">
                         <p className="text-sm font-semibold text-gray-900">{fmtFCFAList(restant)}</p>
-                        <p className="text-[10px] text-gray-400">Utilisé: {fmtFCFAList(used)} / {fmtFCFAList(c.budget_fcfa)}</p>
+                        <p className="text-[10px] text-gray-400">Utilisé: {fmtFCFAList(used)} / {fmtFCFAList(budgetTotal)}</p>
                       </div>
                     );
                   })()}

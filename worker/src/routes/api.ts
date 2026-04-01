@@ -745,7 +745,16 @@ campagnesRouter.use('*', authMiddleware);
 campagnesRouter.get('/', async c => {
   const { results } = await c.env.DB.prepare(
     `SELECT c.*, r.email as responsable_email, a.nom || ' ' || a.prenom as responsable_nom,
-            COALESCE(SUM(CASE WHEN t.statut = 'confirme' THEN COALESCE(t.montant_fcfa, 0) ELSE 0 END), 0) AS budget_confirme_fcfa
+            COALESCE(SUM(CASE WHEN t.statut = 'confirme' THEN COALESCE(t.montant_fcfa, 0) ELSE 0 END), 0) AS budget_confirme_fcfa,
+            (
+              SELECT COALESCE(SUM(COALESCE(ag.prix_cfa, 0)), 0)
+              FROM agents ag
+              WHERE ag.actif = 1
+                AND NOT EXISTS (
+                  SELECT 1 FROM transactions tt
+                  WHERE tt.campagne_id = c.id AND tt.agent_id = ag.id AND tt.statut = 'confirme'
+                )
+            ) AS budget_restant_manuel_fcfa
      FROM campagnes c
      JOIN responsables r ON r.id = c.responsable_id
      JOIN agents a ON a.id = r.agent_id
