@@ -744,10 +744,13 @@ campagnesRouter.use('*', authMiddleware);
 
 campagnesRouter.get('/', async c => {
   const { results } = await c.env.DB.prepare(
-    `SELECT c.*, r.email as responsable_email, a.nom || ' ' || a.prenom as responsable_nom
+    `SELECT c.*, r.email as responsable_email, a.nom || ' ' || a.prenom as responsable_nom,
+            COALESCE(SUM(CASE WHEN t.statut = 'confirme' THEN COALESCE(t.montant_fcfa, 0) ELSE 0 END), 0) AS budget_confirme_fcfa
      FROM campagnes c
      JOIN responsables r ON r.id = c.responsable_id
      JOIN agents a ON a.id = r.agent_id
+     LEFT JOIN transactions t ON t.campagne_id = c.id
+     GROUP BY c.id
      ORDER BY c.mois DESC`
   ).all();
   return c.json({ campagnes: results });

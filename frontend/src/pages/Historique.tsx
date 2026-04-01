@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { historiqueApi } from '../lib/api';
 import { Card, TxBadge, RoleBadge, Modal, Button, Spinner } from '../components/ui';
-import { fmtDateTime, fmtTelephone } from '../lib/utils';
+import { fmtDateTime, fmtMois, fmtTelephone } from '../lib/utils';
 
 export default function HistoriquePage() {
   const [filters, setFilters]   = useState({ telephone: '', statut: '', campagne_id: '' });
@@ -84,7 +84,7 @@ export default function HistoriquePage() {
                       <td className="px-4 py-3 font-medium text-gray-900">{tx.prenom} {tx.nom}</td>
                       <td className="px-4 py-3 font-mono text-xs text-gray-600">{fmtTelephone(tx.telephone)}</td>
                       <td className="px-4 py-3">{tx.role && <RoleBadge role={tx.role}/>}</td>
-                      <td className="px-4 py-3 text-xs text-gray-500">#{tx.campagne_id}</td>
+                      <td className="px-4 py-3 text-xs text-gray-500">{tx.mois ? fmtMois(tx.mois) : `#${tx.campagne_id}`}</td>
                       <td className="px-4 py-3"><TxBadge statut={tx.statut}/></td>
                       <td className="px-4 py-3 text-xs text-gray-500">{fmtDateTime(tx.tente_le)}</td>
                       <td className="px-4 py-3 text-right">
@@ -112,7 +112,7 @@ export default function HistoriquePage() {
                   <TxBadge statut={tx.statut}/>
                 </div>
                 <div className="flex items-center justify-between text-xs text-gray-500">
-                  <span>Campagne #{tx.campagne_id} · {fmtDateTime(tx.tente_le)}</span>
+                  <span>{tx.mois ? fmtMois(tx.mois) : `Campagne #${tx.campagne_id}`} · {fmtDateTime(tx.tente_le)}</span>
                   <button onClick={() => setPreuveId(tx.id)} className="text-brand-600 font-medium">Preuve →</button>
                 </div>
               </Card>

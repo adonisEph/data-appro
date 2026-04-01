@@ -36,8 +36,8 @@ export function useProvisionProgress(campagneId: number): ProvisionProgress {
 
   const confirmes  = transactions.filter(t => t.statut === 'confirme').length;
   const echecs     = transactions.filter(t => t.statut === 'echec').length;
-  const enAttente  = transactions.filter(t => t.statut === 'en_attente' || t.statut === 'envoye').length;
   const total      = campagne?.total_agents ?? 0;
+  const enAttente  = Math.max(0, total - confirmes - echecs);
   const pct        = total > 0 ? Math.round(((confirmes + echecs) / total) * 100) : 0;
 
   return {

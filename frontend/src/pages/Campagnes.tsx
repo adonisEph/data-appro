@@ -79,9 +79,18 @@ export function CampagnesPage() {
                     <h3 className="font-semibold text-gray-900">Campagne {c.mois}</h3>
                     <CampagneBadge statut={c.statut} />
                   </div>
-                  <span className="text-sm font-semibold text-gray-900">
-                    {c.budget_fcfa.toLocaleString('fr-FR')} FCFA
-                  </span>
+                  {(() => {
+                    const used = typeof (c as unknown as { budget_confirme_fcfa?: number }).budget_confirme_fcfa === 'number'
+                      ? Number((c as unknown as { budget_confirme_fcfa?: number }).budget_confirme_fcfa)
+                      : 0;
+                    const restant = Math.max(0, Number(c.budget_fcfa || 0) - used);
+                    return (
+                      <div className="text-right">
+                        <p className="text-sm font-semibold text-gray-900">{fmtFCFA(restant)}</p>
+                        <p className="text-[10px] text-gray-400">Utilisé: {fmtFCFA(used)} / {fmtFCFA(c.budget_fcfa)}</p>
+                      </div>
+                    );
+                  })()}
                 </div>
                 <div className="grid grid-cols-3 gap-4 text-sm mb-3">
                   <div>
@@ -286,6 +295,11 @@ export function CampagneDetailPage() {
   if (isLoading) return <div className="flex justify-center py-16"><Spinner size="lg" className="text-brand-600" /></div>;
   if (!campagne) return <div className="p-6 text-red-600">Campagne introuvable</div>;
 
+  const budgetConfirme = transactions
+    .filter(t => t.statut === 'confirme')
+    .reduce((s, t) => s + (typeof t.montant_fcfa === 'number' ? t.montant_fcfa : 0), 0);
+  const budgetRestant = Math.max(0, (campagne.budget_fcfa || 0) - budgetConfirme);
+
   return (
     <div className="p-6 max-w-6xl mx-auto space-y-6">
       {/* Confirm lancer */}
@@ -328,17 +342,23 @@ export function CampagneDetailPage() {
 
       {/* Résumé */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        {[
-          { label: 'Budget', value: fmtFCFA(campagne.budget_fcfa) },
-          { label: 'Option', value: campagne.option_envoi.toUpperCase() },
-          { label: 'Confirmés', value: `${campagne.agents_ok} / ${campagne.total_agents}` },
-          { label: 'Échecs', value: String(campagne.agents_echec) },
-        ].map(({ label, value }) => (
-          <Card key={label} className="p-4">
-            <p className="text-xs text-gray-500 mb-1">{label}</p>
-            <p className="text-lg font-bold text-gray-900">{value}</p>
-          </Card>
-        ))}
+        <Card className="p-4">
+          <p className="text-xs text-gray-500 mb-1">Budget</p>
+          <p className="text-lg font-bold text-gray-900">{fmtFCFA(budgetRestant)}</p>
+          <p className="text-[10px] text-gray-400">Utilisé: {fmtFCFA(budgetConfirme)} / {fmtFCFA(campagne.budget_fcfa)}</p>
+        </Card>
+        <Card className="p-4">
+          <p className="text-xs text-gray-500 mb-1">Option</p>
+          <p className="text-lg font-bold text-gray-900">{campagne.option_envoi.toUpperCase()}</p>
+        </Card>
+        <Card className="p-4">
+          <p className="text-xs text-gray-500 mb-1">Confirmés</p>
+          <p className="text-lg font-bold text-gray-900">{campagne.agents_ok} / {campagne.total_agents}</p>
+        </Card>
+        <Card className="p-4">
+          <p className="text-xs text-gray-500 mb-1">Échecs</p>
+          <p className="text-lg font-bold text-gray-900">{String(campagne.agents_echec)}</p>
+        </Card>
       </div>
 
       {/* LiveBanner quand en_cours */}
