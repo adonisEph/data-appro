@@ -23,6 +23,11 @@ export function CampagnesPage() {
   const { isSuperAdmin } = useAuth();
   const [deleteCampagne, setDeleteCampagne] = useState<import('../types').Campagne | null>(null);
 
+  const fmtFCFAList = (montant: number | null | undefined): string => {
+    if (montant == null) return '—';
+    return `${new Intl.NumberFormat('fr-FR', { maximumFractionDigits: 0 }).format(montant)} FCFA`;
+  };
+
   const deleteMut = useMutation({
     mutationFn: (id: number) => campagnesApi.delete(id),
     onSuccess: (res) => {
@@ -86,8 +91,8 @@ export function CampagnesPage() {
                     const restant = Math.max(0, Number(c.budget_fcfa || 0) - used);
                     return (
                       <div className="text-right">
-                        <p className="text-sm font-semibold text-gray-900">{fmtFCFA(restant)}</p>
-                        <p className="text-[10px] text-gray-400">Utilisé: {fmtFCFA(used)} / {fmtFCFA(c.budget_fcfa)}</p>
+                        <p className="text-sm font-semibold text-gray-900">{fmtFCFAList(restant)}</p>
+                        <p className="text-[10px] text-gray-400">Utilisé: {fmtFCFAList(used)} / {fmtFCFAList(c.budget_fcfa)}</p>
                       </div>
                     );
                   })()}
