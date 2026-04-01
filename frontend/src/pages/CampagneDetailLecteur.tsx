@@ -17,7 +17,8 @@ export default function CampagneDetailLecteurPage() {
   });
 
   const campagne = data?.campagne;
-  const transactions = (data?.transactions ?? []).filter(tx => {
+  const allTransactions = data?.transactions ?? [];
+  const transactions = allTransactions.filter(tx => {
     const matchS = !filterStatut || tx.statut === filterStatut;
     const matchR = !search || tx.telephone.includes(search) || `${tx.nom ?? ''} ${tx.prenom ?? ''}`.toLowerCase().includes(search.toLowerCase());
     return matchS && matchR;
@@ -26,7 +27,7 @@ export default function CampagneDetailLecteurPage() {
   if (isLoading) return <div className="flex justify-center py-16"><Spinner size="lg" className="text-brand-600"/></div>;
   if (!campagne) return <div className="p-6 text-red-600">Campagne introuvable</div>;
 
-  const budgetConfirme = transactions
+  const budgetConfirme = allTransactions
     .filter(t => t.statut === 'confirme')
     .reduce((s, t) => s + (typeof t.montant_fcfa === 'number' ? t.montant_fcfa : 0), 0);
   const budgetRestant = Math.max(0, (campagne.budget_fcfa || 0) - budgetConfirme);
