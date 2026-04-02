@@ -204,8 +204,8 @@ export function CampagneDetailPage() {
   const isManual = (campagne as unknown as { mode?: string } | null)?.mode === 'manuel';
 
   const { data: agentsData } = useQuery({
-    queryKey: ['agents'],
-    queryFn: agentsApi.list,
+    queryKey: ['campagne-eligible-agents', id],
+    queryFn: () => campagnesApi.eligibleAgents(Number(id)),
     enabled: Boolean(isManual),
     staleTime: 0,
   });

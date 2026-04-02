@@ -750,6 +750,7 @@ campagnesRouter.get('/', async c => {
               SELECT COALESCE(SUM(COALESCE(ag.prix_cfa, 0)), 0)
               FROM agents ag
               WHERE ag.actif = 1
+                AND datetime(ag.created_at) <= datetime(COALESCE(c.lance_le, c.created_at))
                 AND NOT EXISTS (
                   SELECT 1 FROM transactions tt
                   WHERE tt.campagne_id = c.id AND tt.agent_id = ag.id AND tt.statut = 'confirme'
@@ -763,6 +764,22 @@ campagnesRouter.get('/', async c => {
      ORDER BY c.mois DESC`
   ).all();
   return c.json({ campagnes: results });
+});
+
+campagnesRouter.get('/:id/eligible-agents', async c => {
+  const id = Number(c.req.param('id'));
+  const campagne = await c.env.DB.prepare(`SELECT lance_le, created_at FROM campagnes WHERE id = ?`).bind(id).first<{ lance_le: string | null; created_at: string }>();
+  if (!campagne) return c.json({ error: 'Campagne introuvable' }, 404);
+
+  const cutoff = campagne.lance_le ?? campagne.created_at;
+
+  const { results } = await c.env.DB.prepare(
+    `SELECT * FROM agents
+     WHERE actif = 1 AND datetime(created_at) <= datetime(?)
+     ORDER BY nom, prenom`
+  ).bind(cutoff).all();
+
+  return c.json({ agents: results, total: results.length, cutoff });
 });
 
 campagnesRouter.post('/', noViewerMiddleware, async c => {
