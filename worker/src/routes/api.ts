@@ -773,13 +773,35 @@ campagnesRouter.get('/:id/eligible-agents', async c => {
 
   const cutoff = campagne.lance_le ?? campagne.created_at;
 
+  const totalAll = await c.env.DB.prepare(
+    `SELECT COUNT(*) as n FROM agents
+     WHERE datetime(created_at) <= datetime(?)`
+  ).bind(cutoff).first<{ n: number }>();
+
+  const totalActive = await c.env.DB.prepare(
+    `SELECT COUNT(*) as n FROM agents
+     WHERE actif = 1 AND datetime(created_at) <= datetime(?)`
+  ).bind(cutoff).first<{ n: number }>();
+
+  const deletedBudget = await c.env.DB.prepare(
+    `SELECT COALESCE(SUM(COALESCE(prix_cfa, 0)), 0) as s FROM agents
+     WHERE actif = 0 AND datetime(created_at) <= datetime(?)`
+  ).bind(cutoff).first<{ s: number }>();
+
   const { results } = await c.env.DB.prepare(
     `SELECT * FROM agents
      WHERE actif = 1 AND datetime(created_at) <= datetime(?)
      ORDER BY nom, prenom`
   ).bind(cutoff).all();
 
-  return c.json({ agents: results, total: results.length, cutoff });
+  return c.json({
+    agents: results,
+    total: results.length,
+    total_all: totalAll?.n ?? results.length,
+    total_active: totalActive?.n ?? results.length,
+    deleted_budget_fcfa: deletedBudget?.s ?? 0,
+    cutoff,
+  });
 });
 
 campagnesRouter.post('/', noViewerMiddleware, async c => {

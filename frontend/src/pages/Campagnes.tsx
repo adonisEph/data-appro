@@ -195,7 +195,7 @@ export function CampagneDetailPage() {
 
   const {
     campagne, transactions, isLive,
-    confirmes, echecs, enAttente, isLoading,
+    confirmes, echecs, enAttente, total, deletedBudgetFcfa, isLoading,
   } = useProvisionProgress(Number(id));
 
   const [modeTest, setModeTest] = useState(false);
@@ -321,9 +321,11 @@ export function CampagneDetailPage() {
     .filter(t => t.statut === 'confirme')
     .reduce((s, t) => s + (typeof t.montant_fcfa === 'number' ? t.montant_fcfa : 0), 0);
 
+  const budgetConfirmeAvecSuppressions = budgetConfirme + (typeof deletedBudgetFcfa === 'number' ? deletedBudgetFcfa : 0);
+
   const budgetRestant = isManual
     ? Math.min(budgetTotal, Math.max(0, budgetRestantManuel))
-    : Math.max(0, budgetTotal - budgetConfirme);
+    : Math.max(0, budgetTotal - budgetConfirmeAvecSuppressions);
 
   const budgetUtilise = Math.max(0, budgetTotal - budgetRestant);
 
@@ -380,7 +382,7 @@ export function CampagneDetailPage() {
         </Card>
         <Card className="p-4">
           <p className="text-xs text-gray-500 mb-1">Confirmés</p>
-          <p className="text-lg font-bold text-gray-900">{campagne.agents_ok} / {campagne.total_agents}</p>
+          <p className="text-lg font-bold text-gray-900">{confirmes} / {total}</p>
         </Card>
         <Card className="p-4">
           <p className="text-xs text-gray-500 mb-1">Échecs</p>

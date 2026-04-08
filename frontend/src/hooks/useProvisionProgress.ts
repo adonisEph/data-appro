@@ -12,9 +12,12 @@ interface ProvisionProgress {
   transactions: Transaction[];
   isLive: boolean;
   pct: number;
+  total: number;
   confirmes: number;
   echecs: number;
   enAttente: number;
+  deletedDuringCampaign: number;
+  deletedBudgetFcfa: number;
   isLoading: boolean;
 }
 
@@ -42,20 +45,35 @@ export function useProvisionProgress(campagneId: number): ProvisionProgress {
     refetchInterval: isLive ? 5000 : false,
   });
 
-  const confirmes  = transactions.filter(t => t.statut === 'confirme').length;
+  const confirmesTx  = transactions.filter(t => t.statut === 'confirme').length;
   const echecs     = transactions.filter(t => t.statut === 'echec').length;
-  const total      = typeof eligibleData?.total === 'number' ? eligibleData.total : (campagne?.total_agents ?? 0);
+  const totalAll   = typeof eligibleData?.total_all === 'number'
+    ? eligibleData.total_all
+    : (typeof eligibleData?.total === 'number' ? eligibleData.total : (campagne?.total_agents ?? 0));
+  const totalActive = typeof eligibleData?.total_active === 'number'
+    ? eligibleData.total_active
+    : (typeof eligibleData?.total === 'number' ? eligibleData.total : (campagne?.total_agents ?? 0));
+
+  const deletedDuringCampaign = Math.max(0, totalAll - totalActive);
+  const confirmes = confirmesTx + deletedDuringCampaign;
+
+  const total      = totalAll;
   const enAttente  = Math.max(0, total - confirmes - echecs);
   const pct        = total > 0 ? Math.round(((confirmes + echecs) / total) * 100) : 0;
+
+  const deletedBudgetFcfa = typeof eligibleData?.deleted_budget_fcfa === 'number' ? eligibleData.deleted_budget_fcfa : 0;
 
   return {
     campagne,
     transactions,
     isLive,
     pct,
+    total,
     confirmes,
     echecs,
     enAttente,
+    deletedDuringCampaign,
+    deletedBudgetFcfa,
     isLoading,
   };
 }
