@@ -54,7 +54,7 @@ export function useProvisionProgress(campagneId: number): ProvisionProgress {
     : (typeof eligibleData?.total === 'number' ? eligibleData.total : totalFixed);
 
   const deletedDuringCampaign = Math.max(0, totalFixed - totalActive);
-  const confirmes = confirmesTx + deletedDuringCampaign;
+  const confirmes = confirmesTx;
 
   const total      = totalFixed;
   const enAttente  = Math.max(0, totalFixed - confirmes - echecs);
