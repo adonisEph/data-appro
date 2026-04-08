@@ -206,7 +206,7 @@ export function CampagneDetailPage() {
   const { data: agentsData } = useQuery({
     queryKey: ['campagne-eligible-agents', id],
     queryFn: () => campagnesApi.eligibleAgents(Number(id)),
-    enabled: Boolean(isManual),
+    enabled: Boolean(campagne),
     staleTime: 0,
   });
 
@@ -317,15 +317,16 @@ export function CampagneDetailPage() {
     .filter(r => r.statut !== 'confirme')
     .reduce((s, r) => s + (typeof r.montant === 'number' ? r.montant : 0), 0);
 
-  const budgetConfirme = transactions
-    .filter(t => t.statut === 'confirme')
-    .reduce((s, t) => s + (typeof t.montant_fcfa === 'number' ? t.montant_fcfa : 0), 0);
-
-  const budgetConfirmeAvecSuppressions = budgetConfirme + (typeof deletedBudgetFcfa === 'number' ? deletedBudgetFcfa : 0);
+  const budgetRestantAuto = (agentsData?.agents ?? [])
+    .filter(a => {
+      const tx = txByAgentId.get(a.id);
+      return tx?.statut !== 'confirme';
+    })
+    .reduce((s, a) => s + (typeof a.prix_cfa === 'number' ? a.prix_cfa : 0), 0);
 
   const budgetRestant = isManual
     ? Math.min(budgetTotal, Math.max(0, budgetRestantManuel))
-    : Math.max(0, budgetTotal - budgetConfirmeAvecSuppressions);
+    : Math.min(budgetTotal, Math.max(0, budgetRestantAuto));
 
   const budgetUtilise = Math.max(0, budgetTotal - budgetRestant);
 

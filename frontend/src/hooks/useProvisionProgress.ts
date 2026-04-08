@@ -47,18 +47,17 @@ export function useProvisionProgress(campagneId: number): ProvisionProgress {
 
   const confirmesTx  = transactions.filter(t => t.statut === 'confirme').length;
   const echecs     = transactions.filter(t => t.statut === 'echec').length;
-  const totalAll   = typeof eligibleData?.total_all === 'number'
-    ? eligibleData.total_all
-    : (typeof eligibleData?.total === 'number' ? eligibleData.total : (campagne?.total_agents ?? 0));
+  const totalFixed = campagne?.total_agents ?? 0;
+
   const totalActive = typeof eligibleData?.total_active === 'number'
     ? eligibleData.total_active
-    : (typeof eligibleData?.total === 'number' ? eligibleData.total : (campagne?.total_agents ?? 0));
+    : (typeof eligibleData?.total === 'number' ? eligibleData.total : totalFixed);
 
-  const deletedDuringCampaign = Math.max(0, totalAll - totalActive);
+  const deletedDuringCampaign = Math.max(0, totalFixed - totalActive);
   const confirmes = confirmesTx + deletedDuringCampaign;
 
-  const total      = totalAll;
-  const enAttente  = Math.max(0, total - confirmes - echecs);
+  const total      = totalFixed;
+  const enAttente  = Math.max(0, totalFixed - confirmes - echecs);
   const pct        = total > 0 ? Math.round(((confirmes + echecs) / total) * 100) : 0;
 
   const deletedBudgetFcfa = typeof eligibleData?.deleted_budget_fcfa === 'number' ? eligibleData.deleted_budget_fcfa : 0;
