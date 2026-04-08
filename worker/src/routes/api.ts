@@ -343,6 +343,94 @@ agentsRouter.delete('/:id', superAdminMiddleware, async c => {
   const agent = await c.env.DB.prepare(`SELECT * FROM agents WHERE id = ?`).bind(id).first();
   if (!agent) return c.json({ error: 'Agent introuvable' }, 404);
   await c.env.DB.prepare(`UPDATE agents SET actif = 0, updated_at = datetime('now') WHERE id = ?`).bind(id).run();
+
+  // Si l'agent est supprimé pendant une campagne en cours, le traiter comme confirmé
+  // (pour que les compteurs/budgets/progression et l'historique reflètent la réalité).
+  const { results: campagnesEnCours } = await c.env.DB.prepare(
+    `SELECT id, total_agents, agents_ok, agents_echec, lance_le, created_at
+     FROM campagnes
+     WHERE statut = 'en_cours'`
+  ).all<{
+    id: number;
+    total_agents: number;
+    agents_ok: number;
+    agents_echec: number;
+    lance_le: string | null;
+    created_at: string | null;
+  }>();
+
+  const agentCreatedAt = (agent as { created_at?: string | null }).created_at ?? null;
+  const agentTelephone = (agent as { telephone?: string | null }).telephone ?? null;
+  const agentRole = (agent as { role?: Role | null }).role ?? null;
+  const agentPrix = (agent as { prix_cfa?: number | null }).prix_cfa ?? 0;
+
+  const agentCreatedMs = agentCreatedAt ? new Date(agentCreatedAt).getTime() : NaN;
+  const montantSuppression = agentPrix > 0
+    ? agentPrix
+    : (agentRole ? (MONTANTS_FCFA[agentRole] ?? 0) : 0);
+
+  for (const camp of (campagnesEnCours ?? [])) {
+    const cutoff = camp.lance_le ?? camp.created_at;
+    const cutoffMs = cutoff ? new Date(cutoff).getTime() : NaN;
+
+    // Si on n'a pas de dates fiables, on évite toute auto-confirmation.
+    if (!Number.isFinite(agentCreatedMs) || !Number.isFinite(cutoffMs)) continue;
+
+    // Snapshot: agent inclus si créé avant le cutoff.
+    if (agentCreatedMs > cutoffMs) continue;
+
+    const existingTx = await c.env.DB.prepare(
+      `SELECT id, statut FROM transactions WHERE campagne_id = ? AND agent_id = ? ORDER BY id DESC LIMIT 1`
+    ).bind(camp.id, id).first<{ id: number; statut: string }>();
+
+    if (existingTx && (existingTx.statut === 'confirme' || existingTx.statut === 'echec')) continue;
+
+    if (existingTx) {
+      await c.env.DB.prepare(
+        `UPDATE transactions
+         SET statut = 'confirme',
+             option_used = COALESCE(option_used, 'argent'),
+             montant_fcfa = COALESCE(?, montant_fcfa),
+             airtel_message = 'Confirmé (agent supprimé)',
+             airtel_raw_response = ?,
+             tente_le = datetime('now'),
+             confirme_le = datetime('now')
+         WHERE id = ?`
+      ).bind(
+        montantSuppression > 0 ? montantSuppression : null,
+        JSON.stringify({ mode: 'system', reason: 'agent_deleted', agent_id: id, campagne_id: camp.id }),
+        existingTx.id
+      ).run();
+    } else {
+      await c.env.DB.prepare(
+        `INSERT INTO transactions (campagne_id, agent_id, telephone, montant_fcfa, option_used, statut, airtel_message, airtel_raw_response, tente_le, confirme_le)
+         VALUES (?, ?, ?, ?, 'argent', 'confirme', 'Confirmé (agent supprimé)', ?, datetime('now'), datetime('now'))`
+      ).bind(
+        camp.id,
+        id,
+        agentTelephone,
+        montantSuppression > 0 ? montantSuppression : null,
+        JSON.stringify({ mode: 'system', reason: 'agent_deleted', agent_id: id, campagne_id: camp.id })
+      ).run();
+    }
+
+    await c.env.DB.prepare(`UPDATE campagnes SET agents_ok = agents_ok + 1 WHERE id = ?`).bind(camp.id).run();
+
+    const updated = await c.env.DB.prepare(
+      `SELECT total_agents, agents_ok, agents_echec FROM campagnes WHERE id = ?`
+    ).bind(camp.id).first<{ total_agents: number; agents_ok: number; agents_echec: number }>();
+
+    if (updated) {
+      const done = (updated.agents_ok + updated.agents_echec);
+      if (updated.total_agents > 0 && done >= updated.total_agents) {
+        const final = updated.agents_echec === 0 ? 'terminee' : updated.agents_ok === 0 ? 'annulee' : 'partielle';
+        await c.env.DB.prepare(
+          `UPDATE campagnes SET statut = ?, termine_le = datetime('now') WHERE id = ?`
+        ).bind(final, camp.id).run();
+      }
+    }
+  }
+
   await c.env.DB.prepare(`INSERT INTO audit_logs (agent_id, responsable_id, action, details) VALUES (?, ?, ?, ?)`)
     .bind(id, Number((c.get('user') as JWTPayload).sub), 'AGENT_DELETED', JSON.stringify({ agent })).run();
   return c.json({ ok: true });
