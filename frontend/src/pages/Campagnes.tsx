@@ -320,7 +320,7 @@ export function CampagneDetailPage() {
   const budgetRestantAuto = (agentsData?.agents ?? [])
     .filter(a => {
       const tx = txByAgentId.get(a.id);
-      return tx?.statut !== 'confirme';
+      return tx?.statut !== 'confirme' && tx?.statut !== 'echec';
     })
     .reduce((s, a) => s + (typeof a.prix_cfa === 'number' ? a.prix_cfa : 0), 0);
 
