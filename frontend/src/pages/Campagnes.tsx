@@ -295,7 +295,8 @@ export function CampagneDetailPage() {
   const manualRowsAll = (agentsData?.agents ?? [])
     .map(a => {
       const tx = txByAgentId.get(a.id);
-      const statut = tx?.statut ?? 'en_attente';
+      const rawStatut = tx?.statut ?? 'en_attente';
+      const statut = rawStatut === 'envoye' ? 'en_attente' : rawStatut;
       const montant = a.prix_cfa > 0 ? a.prix_cfa : 0;
       return { a, tx, statut, montant };
     })
@@ -307,6 +308,7 @@ export function CampagneDetailPage() {
     });
 
   const manualRows = manualRowsAll.filter(row => !todoOnly || row.statut === 'en_attente');
+  const enAttenteManuel = manualRowsAll.filter(r => r.statut === 'en_attente').length;
 
   if (isLoading) return <div className="flex justify-center py-16"><Spinner size="lg" className="text-brand-600" /></div>;
   if (!campagne) return <div className="p-6 text-red-600">Campagne introuvable</div>;
@@ -314,7 +316,7 @@ export function CampagneDetailPage() {
   const budgetTotal = campagne.budget_fcfa || 0;
 
   const budgetRestantManuel = manualRowsAll
-    .filter(r => r.statut !== 'confirme')
+    .filter(r => r.statut === 'en_attente')
     .reduce((s, r) => s + (typeof r.montant === 'number' ? r.montant : 0), 0);
 
   const budgetRestantAuto = (agentsData?.agents ?? [])
@@ -397,7 +399,7 @@ export function CampagneDetailPage() {
           campagne={campagne}
           confirmes={confirmes}
           echecs={echecs}
-          enAttente={enAttente}
+          enAttente={isManual ? enAttenteManuel : enAttente}
         />
       ) : (
         /* Barre de progression statique */
