@@ -34,9 +34,17 @@ export function useProvisionProgress(campagneId: number): ProvisionProgress {
   const transactions = data?.transactions ?? [];
   const isLive = campagne?.statut === 'en_cours';
 
+  const { data: eligibleData } = useQuery({
+    queryKey: ['campagne-eligible-agents', campagneId],
+    queryFn: () => campagnesApi.eligibleAgents(campagneId),
+    enabled: Boolean(campagneId),
+    staleTime: 0,
+    refetchInterval: isLive ? 5000 : false,
+  });
+
   const confirmes  = transactions.filter(t => t.statut === 'confirme').length;
   const echecs     = transactions.filter(t => t.statut === 'echec').length;
-  const total      = campagne?.total_agents ?? 0;
+  const total      = typeof eligibleData?.total === 'number' ? eligibleData.total : (campagne?.total_agents ?? 0);
   const enAttente  = Math.max(0, total - confirmes - echecs);
   const pct        = total > 0 ? Math.round(((confirmes + echecs) / total) * 100) : 0;
 

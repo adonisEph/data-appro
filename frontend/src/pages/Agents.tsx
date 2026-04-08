@@ -96,6 +96,9 @@ export default function AgentsPage() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['agents'] });
       qc.invalidateQueries({ queryKey: ['stats'] });
+      qc.invalidateQueries({ queryKey: ['campagnes'] });
+      qc.invalidateQueries({ queryKey: ['campagne-live'] });
+      qc.invalidateQueries({ queryKey: ['campagne-eligible-agents'] });
       toast.success('Agent désactivé');
       setDeleteAgent(null);
     },
