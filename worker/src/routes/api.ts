@@ -923,6 +923,89 @@ campagnesRouter.get('/:id', async c => {
   const id = Number(c.req.param('id'));
   const campagne = await c.env.DB.prepare(`SELECT * FROM campagnes WHERE id = ?`).bind(id).first();
   if (!campagne) return c.json({ error: 'Campagne introuvable' }, 404);
+
+  // Backfill rétroactif : pour les agents déjà supprimés (actif=0) faisant partie du snapshot,
+  // créer/mettre à jour une transaction confirmée afin que l'historique et les compteurs soient cohérents.
+  try {
+    const cutoff = (campagne as { lance_le?: string | null; created_at?: string | null }).lance_le
+      ?? (campagne as { created_at?: string | null }).created_at
+      ?? null;
+
+    if (cutoff) {
+      const { results: missing } = await c.env.DB.prepare(
+        `SELECT a.id as agent_id, a.telephone, a.role, a.prix_cfa
+         FROM agents a
+         WHERE a.actif = 0
+           AND datetime(a.created_at) <= datetime(?)
+           AND NOT EXISTS (
+             SELECT 1 FROM transactions t
+             WHERE t.campagne_id = ? AND t.agent_id = a.id AND t.statut IN ('confirme','echec')
+           )`
+      ).bind(cutoff, id).all<{
+        agent_id: number;
+        telephone: string | null;
+        role: Role;
+        prix_cfa: number;
+      }>();
+
+      let backfilled = 0;
+
+      for (const row of (missing ?? [])) {
+        const montantSuppression = (row.prix_cfa ?? 0) > 0
+          ? row.prix_cfa
+          : (MONTANTS_FCFA[row.role] ?? 0);
+
+        const existingTx = await c.env.DB.prepare(
+          `SELECT id, statut FROM transactions
+           WHERE campagne_id = ? AND agent_id = ?
+           ORDER BY id DESC
+           LIMIT 1`
+        ).bind(id, row.agent_id).first<{ id: number; statut: string }>();
+
+        if (existingTx && (existingTx.statut === 'confirme' || existingTx.statut === 'echec')) continue;
+
+        if (existingTx) {
+          await c.env.DB.prepare(
+            `UPDATE transactions
+             SET statut = 'confirme',
+                 option_used = COALESCE(option_used, 'argent'),
+                 montant_fcfa = COALESCE(?, montant_fcfa),
+                 airtel_message = 'Confirmé (agent supprimé)',
+                 airtel_raw_response = ?,
+                 tente_le = datetime('now'),
+                 confirme_le = datetime('now')
+             WHERE id = ?`
+          ).bind(
+            montantSuppression > 0 ? montantSuppression : null,
+            JSON.stringify({ mode: 'system', reason: 'agent_deleted_backfill', agent_id: row.agent_id, campagne_id: id }),
+            existingTx.id
+          ).run();
+        } else {
+          await c.env.DB.prepare(
+            `INSERT INTO transactions (campagne_id, agent_id, telephone, montant_fcfa, option_used, statut, airtel_message, airtel_raw_response, tente_le, confirme_le)
+             VALUES (?, ?, ?, ?, 'argent', 'confirme', 'Confirmé (agent supprimé)', ?, datetime('now'), datetime('now'))`
+          ).bind(
+            id,
+            row.agent_id,
+            row.telephone,
+            montantSuppression > 0 ? montantSuppression : null,
+            JSON.stringify({ mode: 'system', reason: 'agent_deleted_backfill', agent_id: row.agent_id, campagne_id: id })
+          ).run();
+        }
+
+        backfilled++;
+      }
+
+      if (backfilled > 0) {
+        await c.env.DB.prepare(
+          `UPDATE campagnes SET agents_ok = agents_ok + ? WHERE id = ?`
+        ).bind(backfilled, id).run();
+      }
+    }
+  } catch (err) {
+    console.error('[Campagne Backfill Deleted Agents]', err);
+  }
+
   const { results: transactions } = await c.env.DB.prepare(
     `SELECT t.*, a.nom, a.prenom, a.role, a.role_label
      FROM transactions t JOIN agents a ON a.id = t.agent_id
