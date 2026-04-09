@@ -360,11 +360,13 @@ agentsRouter.delete('/:id', superAdminMiddleware, async c => {
   }>();
 
   const agentCreatedAt = (agent as { created_at?: string | null }).created_at ?? null;
+  const agentUpdatedAt = (agent as { updated_at?: string | null }).updated_at ?? null;
   const agentTelephone = (agent as { telephone?: string | null }).telephone ?? null;
   const agentRole = (agent as { role?: Role | null }).role ?? null;
   const agentPrix = (agent as { prix_cfa?: number | null }).prix_cfa ?? 0;
 
   const agentCreatedMs = agentCreatedAt ? new Date(agentCreatedAt).getTime() : NaN;
+  const agentUpdatedMs = agentUpdatedAt ? new Date(agentUpdatedAt).getTime() : NaN;
   const montantSuppression = agentPrix > 0
     ? agentPrix
     : (agentRole ? (MONTANTS_FCFA[agentRole] ?? 0) : 0);
@@ -374,10 +376,13 @@ agentsRouter.delete('/:id', superAdminMiddleware, async c => {
     const cutoffMs = cutoff ? new Date(cutoff).getTime() : NaN;
 
     // Si on n'a pas de dates fiables, on évite toute auto-confirmation.
-    if (!Number.isFinite(agentCreatedMs) || !Number.isFinite(cutoffMs)) continue;
+    if (!Number.isFinite(agentCreatedMs) || !Number.isFinite(agentUpdatedMs) || !Number.isFinite(cutoffMs)) continue;
 
     // Snapshot: agent inclus si créé avant le cutoff.
     if (agentCreatedMs > cutoffMs) continue;
+
+    // Ne considérer comme "supprimé pendant la campagne" que si la suppression est postérieure au cutoff.
+    if (agentUpdatedMs <= cutoffMs) continue;
 
     const existingTx = await c.env.DB.prepare(
       `SELECT id, statut FROM transactions WHERE campagne_id = ? AND agent_id = ? ORDER BY id DESC LIMIT 1`
@@ -873,8 +878,10 @@ campagnesRouter.get('/:id/eligible-agents', async c => {
 
   const deletedBudget = await c.env.DB.prepare(
     `SELECT COALESCE(SUM(COALESCE(prix_cfa, 0)), 0) as s FROM agents
-     WHERE actif = 0 AND datetime(created_at) <= datetime(?)`
-  ).bind(cutoff).first<{ s: number }>();
+     WHERE actif = 0
+       AND datetime(created_at) <= datetime(?)
+       AND datetime(updated_at) > datetime(?)`
+  ).bind(cutoff, cutoff).first<{ s: number }>();
 
   const { results } = await c.env.DB.prepare(
     `SELECT * FROM agents
@@ -937,11 +944,12 @@ campagnesRouter.get('/:id', async c => {
          FROM agents a
          WHERE a.actif = 0
            AND datetime(a.created_at) <= datetime(?)
+           AND datetime(a.updated_at) > datetime(?)
            AND NOT EXISTS (
              SELECT 1 FROM transactions t
              WHERE t.campagne_id = ? AND t.agent_id = a.id AND t.statut IN ('confirme','echec')
            )`
-      ).bind(cutoff, id).all<{
+      ).bind(cutoff, cutoff, id).all<{
         agent_id: number;
         telephone: string | null;
         role: Role;
@@ -1006,12 +1014,33 @@ campagnesRouter.get('/:id', async c => {
     console.error('[Campagne Backfill Deleted Agents]', err);
   }
 
+  const user = c.get('user');
+  const isSuperAdmin = Boolean((user as JWTPayload | undefined)?.is_super_admin);
+
   const { results: transactions } = await c.env.DB.prepare(
     `SELECT t.*, a.nom, a.prenom, a.role, a.role_label
      FROM transactions t JOIN agents a ON a.id = t.agent_id
-     WHERE t.campagne_id = ? ORDER BY t.tente_le DESC`
-  ).bind(id).all();
-  return c.json({ campagne, transactions });
+     WHERE t.campagne_id = ?
+       AND (
+         ? = 1
+         OR NOT (
+           t.statut = 'confirme'
+           AND t.airtel_message = 'Confirmé (agent supprimé)'
+         )
+       )
+     ORDER BY t.tente_le DESC`
+  ).bind(id, isSuperAdmin ? 1 : 0).all();
+
+  const metrics = await c.env.DB.prepare(
+    `SELECT
+        COALESCE(SUM(CASE WHEN t.statut = 'confirme' THEN 1 ELSE 0 END), 0) AS confirmes,
+        COALESCE(SUM(CASE WHEN t.statut = 'echec' THEN 1 ELSE 0 END), 0) AS echecs,
+        COALESCE(SUM(CASE WHEN t.statut = 'confirme' THEN COALESCE(t.montant_fcfa, 0) ELSE 0 END), 0) AS budget_confirme_fcfa
+     FROM transactions t
+     WHERE t.campagne_id = ?`
+  ).bind(id).first<{ confirmes: number; echecs: number; budget_confirme_fcfa: number }>();
+
+  return c.json({ campagne, transactions, metrics: metrics ?? { confirmes: 0, echecs: 0, budget_confirme_fcfa: 0 } });
 });
 
 campagnesRouter.post('/:id/lancer', noViewerMiddleware, async c => {
@@ -1204,6 +1233,8 @@ historiqueRouter.use('*', authMiddleware);
 
 historiqueRouter.get('/transactions', async c => {
   const { agent_id, campagne_id, statut, telephone } = c.req.query();
+  const user = c.get('user');
+  const isSuperAdmin = Boolean((user as JWTPayload | undefined)?.is_super_admin);
   let query = `SELECT t.*, a.nom, a.prenom, a.role, a.role_label, c.mois
                FROM transactions t JOIN agents a ON a.id = t.agent_id JOIN campagnes c ON c.id = t.campagne_id WHERE 1=1`;
   const params: unknown[] = [];
@@ -1211,6 +1242,9 @@ historiqueRouter.get('/transactions', async c => {
   if (campagne_id) { query += ' AND t.campagne_id = ?'; params.push(Number(campagne_id)); }
   if (statut)      { query += ' AND t.statut = ?';      params.push(statut); }
   if (telephone)   { query += ' AND t.telephone LIKE ?'; params.push(`%${telephone}%`); }
+  if (!isSuperAdmin) {
+    query += " AND NOT (t.statut = 'confirme' AND t.airtel_message = 'Confirmé (agent supprimé)')";
+  }
   query += ' ORDER BY t.tente_le DESC LIMIT 500';
   const { results } = await c.env.DB.prepare(query).bind(...params).all();
   return c.json({ transactions: results, total: results.length });
@@ -1218,11 +1252,22 @@ historiqueRouter.get('/transactions', async c => {
 
 historiqueRouter.get('/transactions/:id/preuve', async c => {
   const id = Number(c.req.param('id'));
+  const user = c.get('user');
+  const isSuperAdmin = Boolean((user as JWTPayload | undefined)?.is_super_admin);
   const tx = await c.env.DB.prepare(
     `SELECT t.*, a.nom, a.prenom, a.telephone as agent_tel, a.role, a.role_label, c.mois, c.budget_fcfa, c.compte_source
      FROM transactions t JOIN agents a ON a.id = t.agent_id JOIN campagnes c ON c.id = t.campagne_id WHERE t.id = ?`
   ).bind(id).first();
   if (!tx) return c.json({ error: 'Transaction introuvable' }, 404);
+
+  if (!isSuperAdmin) {
+    const statut = (tx as { statut?: string | null }).statut;
+    const airtelMessage = (tx as { airtel_message?: string | null }).airtel_message;
+    if (statut === 'confirme' && airtelMessage === 'Confirmé (agent supprimé)') {
+      return c.json({ error: 'Transaction introuvable' }, 404);
+    }
+  }
+
   return c.json({ preuve: tx });
 });
 

@@ -45,16 +45,20 @@ export function useProvisionProgress(campagneId: number): ProvisionProgress {
     refetchInterval: isLive ? 5000 : false,
   });
 
-  const confirmesTx  = transactions.filter(t => t.statut === 'confirme').length;
-  const echecs     = transactions.filter(t => t.statut === 'echec').length;
+  const confirmesTx = transactions.filter(t => t.statut === 'confirme').length;
+  const echecsTx = transactions.filter(t => t.statut === 'echec').length;
   const totalFixed = campagne?.total_agents ?? 0;
+
+  const confirmesAgg = typeof data?.metrics?.confirmes === 'number' ? data.metrics.confirmes : null;
+  const echecsAgg = typeof data?.metrics?.echecs === 'number' ? data.metrics.echecs : null;
 
   const totalActive = typeof eligibleData?.total_active === 'number'
     ? eligibleData.total_active
     : (typeof eligibleData?.total === 'number' ? eligibleData.total : totalFixed);
 
   const deletedDuringCampaign = Math.max(0, totalFixed - totalActive);
-  const confirmes = confirmesTx;
+  const confirmes = confirmesAgg !== null ? confirmesAgg : confirmesTx;
+  const echecs = echecsAgg !== null ? echecsAgg : echecsTx;
 
   const total      = totalFixed;
   const enAttente  = Math.max(0, totalFixed - confirmes - echecs);

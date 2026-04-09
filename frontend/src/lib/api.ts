@@ -69,7 +69,7 @@ export const usersApi = {
 // Campagnes
 export const campagnesApi = {
   list:   () => request<{ campagnes: Campagne[] }>('/campagnes'),
-  get:    (id: number) => request<{ campagne: Campagne; transactions: Transaction[] }>(`/campagnes/${id}`),
+  get:    (id: number) => request<{ campagne: Campagne; transactions: Transaction[]; metrics?: { confirmes: number; echecs: number; budget_confirme_fcfa: number } }>(`/campagnes/${id}`),
   eligibleAgents: (id: number) => request<{ agents: Agent[]; total: number; total_all?: number; total_active?: number; deleted_budget_fcfa?: number; cutoff: string }>(`/campagnes/${id}/eligible-agents`),
   create: (data: { mois: string; budget_fcfa: number; compte_source: string; option_envoi: string; mode?: 'auto' | 'manuel' }) =>
     request<{ ok: boolean; campagne_id: number }>('/campagnes', { method: 'POST', body: JSON.stringify(data) }),
