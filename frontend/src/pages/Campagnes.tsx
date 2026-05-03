@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Link, useParams, useNavigate } from 'react-router-dom';
-import { agentsApi, campagnesApi } from '../lib/api';
+import { agentsApi, campagnesApi, trackedAgentsApi } from '../lib/api';
 import { useToast } from '../components/ui/Toast';
 import { LiveBanner } from '../components/ui/LiveBanner';
 import { ConfirmModal } from '../components/ui/ConfirmModal';
@@ -22,6 +22,13 @@ export function CampagnesPage() {
   const toast = useToast();
   const { isSuperAdmin } = useAuth();
   const [deleteCampagne, setDeleteCampagne] = useState<import('../types').Campagne | null>(null);
+
+  useQuery({
+    queryKey: ['tracked-agents'],
+    queryFn: trackedAgentsApi.list,
+    enabled: isSuperAdmin,
+    staleTime: 10_000,
+  });
 
   const fmtFCFAList = (montant: number | null | undefined): string => {
     if (montant == null) return '—';
@@ -176,6 +183,8 @@ export function CampagneDetailPage() {
   const { id } = useParams<{ id: string }>();
   const qc = useQueryClient();
   const toast = useToast();
+  const navigate = useNavigate();
+  const { isSuperAdmin } = useAuth();
   const [filterStatut, setFilterStatut] = useState('');
   const [search, setSearch] = useState('');
   const [confirmLancer, setConfirmLancer] = useState(false);
@@ -193,10 +202,15 @@ export function CampagneDetailPage() {
     montant_fcfa?: number;
   }>(null);
 
-  const {
-    campagne, transactions, isLive,
-    confirmes, echecs, enAttente, total, deletedBudgetFcfa, isLoading,
-  } = useProvisionProgress(Number(id));
+  const { campagne, transactions, isLive, confirmes, echecs, enAttente, isLoading } = useProvisionProgress(Number(id));
+
+  const { data: trackedData } = useQuery({
+    queryKey: ['tracked-agents'],
+    queryFn: trackedAgentsApi.list,
+    enabled: isSuperAdmin,
+    staleTime: 10_000,
+  });
+  const trackedSet = new Set<number>((trackedData?.tracked_agents ?? []).map(a => a.agent_id));
 
   const [modeTest, setModeTest] = useState(false);
   const [agentsSelectionnes, setAgentsSelectionnes] = useState<number[]>([]);
@@ -385,7 +399,7 @@ export function CampagneDetailPage() {
         </Card>
         <Card className="p-4">
           <p className="text-xs text-gray-500 mb-1">Confirmés</p>
-          <p className="text-lg font-bold text-gray-900">{confirmes} / {total}</p>
+          <p className="text-lg font-bold text-gray-900">{confirmes} / {campagne.total_agents}</p>
         </Card>
         <Card className="p-4">
           <p className="text-xs text-gray-500 mb-1">Échecs</p>
@@ -563,7 +577,12 @@ export function CampagneDetailPage() {
                   return (
                     <tr key={a.id} className="hover:bg-gray-50">
                       <td className="px-3 py-2">
-                        <p className="font-medium text-gray-900">{a.prenom} {a.nom}</p>
+                        <div className="flex items-center gap-2 min-w-0">
+                          <p className="font-medium text-gray-900 truncate">{a.prenom} {a.nom}</p>
+                          {isSuperAdmin && trackedSet.has(a.id) && (
+                            <span className="shrink-0 text-[10px] font-bold bg-red-600 text-white px-2 py-0.5 rounded-full">SUIVI</span>
+                          )}
+                        </div>
                         <p className="text-xs text-gray-400">{a.role_label ?? ''}</p>
                       </td>
                       <td className="px-3 py-2">
@@ -807,6 +826,11 @@ export function NouvelleCampagnePage() {
   const navigate = useNavigate();
   const qc = useQueryClient();
   const toast = useToast();
+  const [qualityConfirm, setQualityConfirm] = useState<null | {
+    phone_duplicates: number;
+    invalid_phones: number;
+    name_duplicates: number;
+  }>(null);
   const [form, setForm] = useState<{
     mois: string;
     budget_fcfa: number;
@@ -830,8 +854,59 @@ export function NouvelleCampagnePage() {
     onError: (err: Error) => toast.error('Erreur création', err.message),
   });
 
+  const runQualityCheckThenCreate = async () => {
+    try {
+      const report = await agentsApi.qualityCheck();
+      const s = report?.summary;
+      const phoneDup = s?.phone_duplicates ?? 0;
+      const invalid = s?.invalid_phones ?? 0;
+      const nameDup = s?.name_duplicates ?? 0;
+
+      // On bloque uniquement sur les anomalies "dures" (téléphone doublon ou invalide).
+      // Les doublons nom/prénom restent un warning non bloquant.
+      if (phoneDup > 0 || invalid > 0) {
+        setQualityConfirm({ phone_duplicates: phoneDup, invalid_phones: invalid, name_duplicates: nameDup });
+        return;
+      }
+
+      if (nameDup > 0) {
+        toast.warning('Attention', `${nameDup} doublon(s) nom/prénom détecté(s).`);
+      }
+
+      createMut.mutate();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      toast.error('Erreur', msg);
+    }
+  };
+
   return (
     <div className="p-6 max-w-2xl mx-auto space-y-6">
+      <ConfirmModal
+        open={qualityConfirm !== null}
+        onClose={() => setQualityConfirm(null)}
+        title="Anomalies détectées"
+        confirmLabel="Créer quand même"
+        confirmVariant="danger"
+        loading={createMut.isPending}
+        onConfirm={() => {
+          setQualityConfirm(null);
+          createMut.mutate();
+        }}
+        message={
+          <div className="space-y-2">
+            <p className="text-sm text-gray-700">
+              Des anomalies ont été détectées dans la liste des agents. Il est recommandé de corriger avant de lancer une campagne.
+            </p>
+            <div className="text-xs text-gray-600 bg-gray-50 border border-gray-200 rounded-lg p-3">
+              <p><strong>Doublons téléphone :</strong> {qualityConfirm?.phone_duplicates ?? 0}</p>
+              <p><strong>Numéros invalides :</strong> {qualityConfirm?.invalid_phones ?? 0}</p>
+              <p><strong>Doublons nom/prénom :</strong> {qualityConfirm?.name_duplicates ?? 0}</p>
+            </div>
+          </div>
+        }
+      />
+
       <div className="flex items-center gap-3">
         <Link to="/campagnes" className="text-gray-400 hover:text-gray-600">
           <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -928,7 +1003,7 @@ export function NouvelleCampagnePage() {
             loading={createMut.isPending}
             onClick={() => {
               if (!form.compte_source) { toast.warning('Champ requis', 'Numéro Airtel Money source manquant.'); return; }
-              createMut.mutate();
+              runQualityCheckThenCreate();
             }}
           >
             Créer la campagne

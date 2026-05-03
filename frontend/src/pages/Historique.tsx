@@ -1,13 +1,15 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { historiqueApi } from '../lib/api';
+import { historiqueApi, trackedAgentsApi } from '../lib/api';
 import { Card, TxBadge, RoleBadge, Modal, Button, Spinner } from '../components/ui';
 import { fmtDateTime, fmtMois, fmtTelephone } from '../lib/utils';
+import { useAuth } from '../hooks/useAuth';
 
 export default function HistoriquePage() {
   const [filters, setFilters]   = useState({ telephone: '', statut: '', campagne_id: '' });
   const [applied, setApplied]   = useState<typeof filters>({ telephone: '', statut: '', campagne_id: '' });
   const [preuveId, setPreuveId] = useState<number | null>(null);
+  const { isSuperAdmin } = useAuth();
 
   const { data, isLoading } = useQuery({
     queryKey: ['transactions', applied],
@@ -25,6 +27,14 @@ export default function HistoriquePage() {
   });
 
   const txList = data?.transactions ?? [];
+
+  const { data: trackedData } = useQuery({
+    queryKey: ['tracked-agents'],
+    queryFn: trackedAgentsApi.list,
+    enabled: isSuperAdmin,
+    staleTime: 10_000,
+  });
+  const trackedSet = new Set<number>((trackedData?.tracked_agents ?? []).map(a => a.agent_id));
 
   return (
     <div className="p-4 md:p-6 max-w-6xl mx-auto space-y-4 md:space-y-6">
@@ -81,7 +91,14 @@ export default function HistoriquePage() {
                 <tbody className="divide-y divide-gray-50">
                   {txList.map(tx => (
                     <tr key={tx.id} className="hover:bg-gray-50">
-                      <td className="px-4 py-3 font-medium text-gray-900">{tx.prenom} {tx.nom}</td>
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span className="font-medium text-gray-900 truncate">{tx.prenom} {tx.nom}</span>
+                          {isSuperAdmin && typeof tx.agent_id === 'number' && trackedSet.has(tx.agent_id) && (
+                            <span className="shrink-0 text-[10px] font-bold bg-red-600 text-white px-2 py-0.5 rounded-full">SUIVI</span>
+                          )}
+                        </div>
+                      </td>
                       <td className="px-4 py-3 font-mono text-xs text-gray-600">{fmtTelephone(tx.telephone)}</td>
                       <td className="px-4 py-3">{tx.role && <RoleBadge role={tx.role}/>}</td>
                       <td className="px-4 py-3 text-xs text-gray-500">{tx.mois ? fmtMois(tx.mois) : `#${tx.campagne_id}`}</td>
@@ -106,7 +123,12 @@ export default function HistoriquePage() {
               <Card key={tx.id} className="p-4">
                 <div className="flex items-start justify-between gap-2 mb-2">
                   <div>
-                    <p className="font-semibold text-gray-900 text-sm">{tx.prenom} {tx.nom}</p>
+                    <div className="flex items-center gap-2 min-w-0">
+                      <p className="font-semibold text-gray-900 text-sm truncate">{tx.prenom} {tx.nom}</p>
+                      {isSuperAdmin && typeof tx.agent_id === 'number' && trackedSet.has(tx.agent_id) && (
+                        <span className="shrink-0 text-[10px] font-bold bg-red-600 text-white px-2 py-0.5 rounded-full">SUIVI</span>
+                      )}
+                    </div>
                     <p className="font-mono text-xs text-gray-500">{fmtTelephone(tx.telephone)}</p>
                   </div>
                   <TxBadge statut={tx.statut}/>

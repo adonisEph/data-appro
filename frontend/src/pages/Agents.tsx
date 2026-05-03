@@ -1,6 +1,6 @@
 import { useState, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { agentsApi, rolesMetierApi } from '../lib/api';
+import { agentsApi, rolesMetierApi, trackedAgentsApi } from '../lib/api';
 import { parseExcelFile, type AgentImportRow } from '../lib/excel';
 import * as XLSX from 'xlsx';
 import { clsx } from 'clsx';
@@ -22,6 +22,18 @@ export default function AgentsPage() {
   const fileRef = useRef<HTMLInputElement>(null);
   const toast = useToast();
   const { isSuperAdmin, isViewer } = useAuth();
+
+  const [trackedModal, setTrackedModal] = useState(false);
+  const [trackedText, setTrackedText] = useState('');
+
+  const [qualityModal, setQualityModal] = useState(false);
+  const [qualityForceOpen, setQualityForceOpen] = useState(false);
+  const [qualityReport, setQualityReport] = useState<null | {
+    phone_duplicates: Array<{ telephone: string; agents: Array<{ id: number; nom: string; prenom: string; actif: number }> }>;
+    name_duplicates: Array<{ nom: string; prenom: string; agents: Array<{ id: number; telephone: string; actif: number }> }>;
+    invalid_phones: Array<{ id: number; nom: string; prenom: string; telephone: string; actif: number }>;
+    summary: { phone_duplicates: number; name_duplicates: number; invalid_phones: number; total_agents: number };
+  }>(null);
 
   const [importPreview, setImportPreview] = useState<AgentImportRow[] | null>(null);
   const [importErrors, setImportErrors]   = useState<string[]>([]);
@@ -45,6 +57,25 @@ export default function AgentsPage() {
     staleTime: 0,
   });
 
+  const { data: trackedData } = useQuery({
+    queryKey: ['tracked-agents'],
+    queryFn: trackedAgentsApi.list,
+    enabled: isSuperAdmin,
+    staleTime: 10_000,
+  });
+
+  const trackedSet = new Set<number>((trackedData?.tracked_agents ?? []).map(a => a.agent_id));
+
+  const saveTrackedMut = useMutation({
+    mutationFn: (agent_ids: number[]) => trackedAgentsApi.set(agent_ids),
+    onSuccess: (res) => {
+      qc.invalidateQueries({ queryKey: ['tracked-agents'] });
+      toast.success('Agents suivis', `${res.agent_ids.length} agent(s) suivi(s).`);
+      setTrackedModal(false);
+    },
+    onError: (err: Error) => toast.error('Erreur', err.message),
+  });
+
   const createMut = useMutation({
     mutationFn: (data: Partial<Agent>) => agentsApi.create(data),
     onSuccess: () => {
@@ -53,6 +84,33 @@ export default function AgentsPage() {
       toast.success('Agent créé');
       setCreateAgent(false);
       setForm({});
+      setQualityForceOpen(false);
+      qualityMut.mutate();
+    },
+    onError: (err: Error) => toast.error('Erreur', err.message),
+  });
+
+  const qualityMut = useMutation({
+    mutationFn: () => agentsApi.qualityCheck(),
+    onSuccess: (res) => {
+      setQualityReport(res);
+      const s = res?.summary;
+      const hasIssues = Boolean(s && (s.phone_duplicates > 0 || s.invalid_phones > 0 || s.name_duplicates > 0));
+
+      if (qualityForceOpen || hasIssues) {
+        setQualityModal(true);
+      }
+
+      if (hasIssues) {
+        toast.warning(
+          'Contrôle qualité terminé',
+          `${s.phone_duplicates} doublon(s) téléphone, ${s.invalid_phones} numéro(s) invalide(s), ${s.name_duplicates} doublon(s) nom/prénom.`
+        );
+      } else {
+        toast.success('Contrôle qualité', 'Aucune anomalie détectée.');
+      }
+
+      setQualityForceOpen(false);
     },
     onError: (err: Error) => toast.error('Erreur', err.message),
   });
@@ -87,6 +145,8 @@ export default function AgentsPage() {
       qc.invalidateQueries({ queryKey: ['agents'] });
       toast.success('Agent mis à jour');
       setEditAgent(null);
+      setQualityForceOpen(false);
+      qualityMut.mutate();
     },
     onError: (err: Error) => toast.error('Erreur', err.message),
   });
@@ -127,6 +187,18 @@ export default function AgentsPage() {
       forfait_label: '',
     });
     setCreateAgent(true);
+  };
+
+  const normalizeTel = (v: string) => String(v ?? '').replace(/\D+/g, '');
+
+  const openTracked = () => {
+    const trackedAgents = trackedData?.tracked_agents ?? [];
+    if (trackedAgents.length > 0) {
+      setTrackedText(trackedAgents.map(a => a.telephone).join('\n'));
+    } else {
+      setTrackedText('');
+    }
+    setTrackedModal(true);
   };
 
   const agents = data?.agents ?? [];
@@ -213,15 +285,23 @@ export default function AgentsPage() {
           </div>
         </div>
         <div className="grid grid-cols-2 sm:flex gap-2 w-full sm:w-auto">
-          {!isViewer && (
-            <Button variant="primary" size="sm" onClick={openCreate} className="w-full sm:w-auto col-span-2 sm:col-span-1">
+          {isSuperAdmin && (
+            <Button variant="secondary" size="sm" onClick={openTracked} className="w-full sm:w-auto">
               <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6l4 2" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
               </svg>
-              <span className="hidden sm:inline">Ajouter un agent</span>
-              <span className="sm:hidden">Ajouter</span>
+              <span className="hidden sm:inline">Agents suivis</span>
+              <span className="sm:hidden">Suivis</span>
             </Button>
           )}
+          <Button variant="secondary" size="sm" onClick={() => { setQualityForceOpen(true); qualityMut.mutate(); }} disabled={qualityMut.isPending} className="w-full sm:w-auto">
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-3-3v6m9-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            <span className="hidden sm:inline">Vérifier les doublons</span>
+            <span className="sm:hidden">Doublons</span>
+          </Button>
           <Button variant="secondary" size="sm" onClick={exportExcel} disabled={filtered.length === 0 || isViewer} className="w-full sm:w-auto">
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
@@ -236,6 +316,14 @@ export default function AgentsPage() {
             <span className="hidden sm:inline">Importer Excel</span>
             <span className="sm:hidden">Import</span>
           </Button>
+          {!isViewer && (
+            <Button size="sm" onClick={openCreate} className="w-full sm:w-auto">
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+              </svg>
+              Ajouter
+            </Button>
+          )}
         </div>
       </div>
 
@@ -357,7 +445,12 @@ export default function AgentsPage() {
                           <div className="w-7 h-7 bg-brand-100 rounded-full flex items-center justify-center text-brand-700 text-xs font-semibold shrink-0">
                             {agent.prenom?.[0]?.toUpperCase()}{agent.nom?.[0]?.toUpperCase()}
                           </div>
-                          <span className="font-medium text-gray-900">{agent.prenom} {agent.nom}</span>
+                          <div className="min-w-0 flex items-center gap-2">
+                            <span className="font-medium text-gray-900 truncate">{agent.prenom} {agent.nom}</span>
+                            {isSuperAdmin && trackedSet.has(agent.id) && (
+                              <span className="shrink-0 text-[10px] font-bold bg-red-600 text-white px-2 py-0.5 rounded-full">SUIVI</span>
+                            )}
+                          </div>
                         </div>
                       </td>
                       <td className="px-4 py-3 font-mono text-xs text-gray-600">{fmtTelephone(agent.telephone)}</td>
@@ -407,7 +500,12 @@ export default function AgentsPage() {
                       {agent.prenom?.[0]?.toUpperCase()}{agent.nom?.[0]?.toUpperCase()}
                     </div>
                     <div className="min-w-0">
-                      <p className="font-semibold text-gray-900 truncate">{agent.prenom} {agent.nom}</p>
+                      <div className="flex items-center gap-2 min-w-0">
+                        <p className="font-semibold text-gray-900 truncate">{agent.prenom} {agent.nom}</p>
+                        {isSuperAdmin && trackedSet.has(agent.id) && (
+                          <span className="shrink-0 text-[10px] font-bold bg-red-600 text-white px-2 py-0.5 rounded-full">SUIVI</span>
+                        )}
+                      </div>
                       <p className="text-xs text-gray-500 font-mono">{fmtTelephone(agent.telephone)}</p>
                     </div>
                   </div>
@@ -547,6 +645,73 @@ export default function AgentsPage() {
         </div>
       </Modal>
 
+      <Modal open={trackedModal} onClose={() => { setTrackedModal(false); }} title="Agents suivis (Super Admin)">
+        <div className="space-y-3">
+          <p className="text-xs text-gray-500">
+            Collez une liste de téléphones (1 par ligne) ou d'IDs agent. Seuls les agents trouvés seront enregistrés.
+          </p>
+          <textarea
+            value={trackedText}
+            onChange={e => setTrackedText(e.target.value)}
+            className="w-full h-48 px-3 py-2 border border-gray-300 rounded-lg text-sm font-mono focus:outline-none focus:ring-2 focus:ring-brand-500"
+            placeholder="24206XXXXXXX\n24205XXXXXXX\n123"
+          />
+          <div className="flex items-center justify-between gap-2">
+            <Button
+              variant="secondary"
+              onClick={() => {
+                const trackedAgents = trackedData?.tracked_agents ?? [];
+                setTrackedText(trackedAgents.map(a => a.telephone).join('\n'));
+              }}
+            >
+              Réinitialiser
+            </Button>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="secondary"
+                onClick={() => setTrackedModal(false)}
+              >
+                Annuler
+              </Button>
+              <Button
+                onClick={() => {
+                  const agents = (data?.agents ?? []) as Agent[];
+                  const byTel = new Map<string, Agent>();
+                  const byId = new Map<number, Agent>();
+                  agents.forEach(a => {
+                    byTel.set(normalizeTel(a.telephone), a);
+                    byId.set(a.id, a);
+                  });
+
+                  const tokens = trackedText
+                    .split(/\r?\n/)
+                    .map(s => s.trim())
+                    .filter(Boolean);
+
+                  const ids: number[] = [];
+                  for (const t of tokens) {
+                    const maybeId = Number(t);
+                    if (Number.isFinite(maybeId) && maybeId > 0 && byId.has(maybeId)) {
+                      ids.push(maybeId);
+                      continue;
+                    }
+                    const tel = normalizeTel(t);
+                    const a = byTel.get(tel);
+                    if (a) ids.push(a.id);
+                  }
+
+                  const uniq = Array.from(new Set(ids));
+                  saveTrackedMut.mutate(uniq);
+                }}
+                disabled={saveTrackedMut.isPending}
+              >
+                {saveTrackedMut.isPending ? 'Enregistrement…' : 'Enregistrer'}
+              </Button>
+            </div>
+          </div>
+        </div>
+      </Modal>
+
       {/* Modal Édition — rôle et quota complètement dissociés */}
       <Modal open={editAgent !== null} onClose={() => setEditAgent(null)} title="Modifier l'agent">
         {editAgent && (
@@ -630,6 +795,104 @@ export default function AgentsPage() {
             </div>
           </div>
         )}
+      </Modal>
+
+      <Modal open={qualityModal} onClose={() => setQualityModal(false)} title="Vérification doublons & qualité">
+        <div className="space-y-4">
+          <div className="text-xs text-gray-600">
+            {qualityReport?.summary ? (
+              <div className="grid grid-cols-2 gap-2">
+                <div className="bg-gray-50 border border-gray-200 rounded-lg p-2">
+                  <p className="text-[10px] text-gray-500">Doublons téléphone</p>
+                  <p className="text-sm font-bold text-gray-900">{qualityReport.summary.phone_duplicates}</p>
+                </div>
+                <div className="bg-gray-50 border border-gray-200 rounded-lg p-2">
+                  <p className="text-[10px] text-gray-500">Numéros invalides</p>
+                  <p className="text-sm font-bold text-gray-900">{qualityReport.summary.invalid_phones}</p>
+                </div>
+                <div className="bg-gray-50 border border-gray-200 rounded-lg p-2">
+                  <p className="text-[10px] text-gray-500">Doublons nom/prénom</p>
+                  <p className="text-sm font-bold text-gray-900">{qualityReport.summary.name_duplicates}</p>
+                </div>
+                <div className="bg-gray-50 border border-gray-200 rounded-lg p-2">
+                  <p className="text-[10px] text-gray-500">Total agents</p>
+                  <p className="text-sm font-bold text-gray-900">{qualityReport.summary.total_agents}</p>
+                </div>
+              </div>
+            ) : (
+              <p>Aucun rapport.</p>
+            )}
+          </div>
+
+          {qualityReport?.phone_duplicates?.length ? (
+            <div>
+              <p className="text-sm font-semibold text-gray-900 mb-2">Doublons téléphone</p>
+              <div className="space-y-2">
+                {qualityReport.phone_duplicates.map(d => (
+                  <div key={d.telephone} className="border border-red-200 bg-red-50 rounded-lg p-3">
+                    <p className="text-xs font-mono text-red-900">{d.telephone}</p>
+                    <div className="mt-1 text-xs text-red-800">
+                      {d.agents.map(a => (
+                        <div key={a.id} className="flex items-center justify-between">
+                          <span>#{a.id} — {a.prenom} {a.nom}</span>
+                          <span className={a.actif ? 'text-green-700' : 'text-gray-500'}>{a.actif ? 'actif' : 'inactif'}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : null}
+
+          {qualityReport?.invalid_phones?.length ? (
+            <div>
+              <p className="text-sm font-semibold text-gray-900 mb-2">Numéros invalides</p>
+              <div className="space-y-2">
+                {qualityReport.invalid_phones.map(a => (
+                  <div key={a.id} className="border border-amber-200 bg-amber-50 rounded-lg p-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-semibold text-amber-900">#{a.id} — {a.prenom} {a.nom}</span>
+                      <span className={a.actif ? 'text-green-700 text-xs' : 'text-gray-500 text-xs'}>{a.actif ? 'actif' : 'inactif'}</span>
+                    </div>
+                    <p className="text-xs font-mono text-amber-900 mt-1">{a.telephone}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : null}
+
+          {qualityReport?.name_duplicates?.length ? (
+            <div>
+              <p className="text-sm font-semibold text-gray-900 mb-2">Doublons nom/prénom (suspect)</p>
+              <div className="space-y-2">
+                {qualityReport.name_duplicates.map((d, idx) => (
+                  <div key={`${d.nom}|${d.prenom}|${idx}`} className="border border-gray-200 bg-gray-50 rounded-lg p-3">
+                    <p className="text-xs font-semibold text-gray-900">{d.prenom} {d.nom}</p>
+                    <div className="mt-1 text-xs text-gray-700">
+                      {d.agents.map(a => (
+                        <div key={a.id} className="flex items-center justify-between">
+                          <span>#{a.id} — {a.telephone}</span>
+                          <span className={a.actif ? 'text-green-700' : 'text-gray-500'}>{a.actif ? 'actif' : 'inactif'}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : null}
+
+          {!qualityReport?.phone_duplicates?.length && !qualityReport?.invalid_phones?.length && !qualityReport?.name_duplicates?.length ? (
+            <div className="text-sm text-green-700 bg-green-50 border border-green-200 rounded-lg p-3">
+              Aucune anomalie détectée.
+            </div>
+          ) : null}
+
+          <div className="flex justify-end pt-2">
+            <Button variant="secondary" onClick={() => setQualityModal(false)}>Fermer</Button>
+          </div>
+        </div>
       </Modal>
 
       {/* Confirm Suppression */}

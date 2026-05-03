@@ -38,6 +38,7 @@ export const rolesMetierApi = {
 export const agentsApi = {
   list:   () => request<{ agents: Agent[]; total: number }>('/agents'),
   get:    (id: number) => request<{ agent: Agent }>(`/agents/${id}`),
+  qualityCheck: () => request<{ phone_duplicates: Array<{ telephone: string; agents: Array<{ id: number; nom: string; prenom: string; actif: number }> }>; name_duplicates: Array<{ nom: string; prenom: string; agents: Array<{ id: number; telephone: string; actif: number }> }>; invalid_phones: Array<{ id: number; nom: string; prenom: string; telephone: string; actif: number }>; summary: { phone_duplicates: number; name_duplicates: number; invalid_phones: number; total_agents: number } }>(`/agents/quality-check`),
   create: (data: Partial<Agent>) =>
     request<{ ok: boolean; agent: Agent }>('/agents', { method: 'POST', body: JSON.stringify(data) }),
   import: (agents: Array<Partial<Agent>>) =>
@@ -151,4 +152,17 @@ export const auditLogsApi = {
       `/audit-logs${qs ? '?' + qs : ''}`
     );
   },
+};
+
+// Tracked agents (Super Admin)
+export const trackedAgentsApi = {
+  list: () =>
+    request<{ tracked_agents: Array<{ agent_id: number; nom: string; prenom: string; telephone: string; role: string; quota_gb: number; prix_cfa: number; actif: number; created_at: string; updated_at: string }> }>(
+      '/tracked-agents'
+    ),
+  set: (agent_ids: number[]) =>
+    request<{ ok: true; agent_ids: number[] }>(
+      '/tracked-agents',
+      { method: 'PUT', body: JSON.stringify({ agent_ids }) }
+    ),
 };

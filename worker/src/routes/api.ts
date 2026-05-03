@@ -181,6 +181,82 @@ agentsRouter.get('/', async c => {
   return c.json({ agents: results, total: results.length });
 });
 
+agentsRouter.get('/quality-check', async c => {
+  const { results: allAgents } = await c.env.DB.prepare(
+    `SELECT id, nom, prenom, telephone, actif, created_at, updated_at
+     FROM agents
+     ORDER BY id ASC`
+  ).all<{
+    id: number;
+    nom: string;
+    prenom: string;
+    telephone: string;
+    actif: number;
+    created_at: string;
+    updated_at: string;
+  }>();
+
+  const agents = allAgents ?? [];
+
+  const normalizePhone = (s: string) => (s ?? '').replace(/\s+/g, '').trim();
+  const normalizeName = (s: string) => (s ?? '').trim().toLowerCase();
+
+  const byPhone = new Map<string, typeof agents>();
+  const invalidPhones: Array<{ id: number; nom: string; prenom: string; telephone: string; actif: number }> = [];
+
+  for (const a of agents) {
+    const tel = normalizePhone(a.telephone);
+
+    // Validation simple: digits only, longueur 8 à 15
+    if (!/^[0-9]{8,15}$/.test(tel)) {
+      invalidPhones.push({ id: a.id, nom: a.nom, prenom: a.prenom, telephone: a.telephone, actif: a.actif });
+    }
+
+    const arr = byPhone.get(tel) ?? [];
+    arr.push(a);
+    byPhone.set(tel, arr);
+  }
+
+  const phoneDuplicates = Array.from(byPhone.entries())
+    .filter(([, list]) => list.length > 1)
+    .map(([telephone, list]) => ({
+      telephone,
+      agents: list.map(a => ({ id: a.id, nom: a.nom, prenom: a.prenom, actif: a.actif })),
+    }));
+
+  const byName = new Map<string, typeof agents>();
+  for (const a of agents) {
+    const key = `${normalizeName(a.nom)}|${normalizeName(a.prenom)}`;
+    if (key === '|' || key === 'agent|' || key.startsWith('agent|')) continue;
+    const arr = byName.get(key) ?? [];
+    arr.push(a);
+    byName.set(key, arr);
+  }
+
+  const nameDuplicates = Array.from(byName.entries())
+    .filter(([, list]) => list.length > 1)
+    .map(([key, list]) => {
+      const [nom, prenom] = key.split('|');
+      return {
+        nom,
+        prenom,
+        agents: list.map(a => ({ id: a.id, telephone: a.telephone, actif: a.actif })),
+      };
+    });
+
+  return c.json({
+    phone_duplicates: phoneDuplicates,
+    name_duplicates: nameDuplicates,
+    invalid_phones: invalidPhones,
+    summary: {
+      phone_duplicates: phoneDuplicates.length,
+      name_duplicates: nameDuplicates.length,
+      invalid_phones: invalidPhones.length,
+      total_agents: agents.length,
+    },
+  });
+});
+
 agentsRouter.get('/:id', async c => {
   const id = Number(c.req.param('id'));
   const agent = await c.env.DB.prepare(`SELECT * FROM agents WHERE id = ?`).bind(id).first();
@@ -450,19 +526,29 @@ const eventsRouter = new Hono<AppEnv>();
 eventsRouter.use('*', authMiddleware);
 
 eventsRouter.get('/', async c => {
+  const user = c.get('user') as JWTPayload;
   const sinceIdRaw = c.req.query('since_id');
   const limitRaw = c.req.query('limit');
 
   const sinceId = sinceIdRaw ? Number(sinceIdRaw) : 0;
   const limit = Math.min(200, Math.max(1, limitRaw ? Number(limitRaw) : 50));
 
-  const { results } = await c.env.DB.prepare(
-    `SELECT id, campagne_id, agent_id, responsable_id, action, details, created_at
-     FROM audit_logs
-     WHERE id > ?
-     ORDER BY id ASC
-     LIMIT ?`
-  ).bind(Number.isFinite(sinceId) ? sinceId : 0, Number.isFinite(limit) ? limit : 50).all();
+  const params: unknown[] = [Number.isFinite(sinceId) ? sinceId : 0];
+  let sql =
+    `SELECT l.id, l.campagne_id, l.agent_id, l.responsable_id, l.action, l.details, l.created_at
+     FROM audit_logs l
+     LEFT JOIN responsables r ON r.id = l.responsable_id
+     WHERE l.id > ?`;
+
+  // Non-superadmin: masquer les actions effectuées par un superadmin
+  if (!user?.is_super_admin) {
+    sql += ` AND COALESCE(r.is_super_admin, 0) = 0`;
+  }
+
+  sql += ` ORDER BY l.id ASC LIMIT ?`;
+  params.push(Number.isFinite(limit) ? limit : 50);
+
+  const { results } = await c.env.DB.prepare(sql).bind(...params).all();
 
   const events = results ?? [];
   const next_since_id = events.length > 0
@@ -478,6 +564,7 @@ const auditLogsRouter = new Hono<AppEnv>();
 auditLogsRouter.use('*', authMiddleware);
 
 auditLogsRouter.get('/', async c => {
+  const user = c.get('user') as JWTPayload;
   const q = c.req.query();
   const from = q.from ? String(q.from) : null;
   const to = q.to ? String(q.to) : null;
@@ -497,6 +584,11 @@ auditLogsRouter.get('/', async c => {
      WHERE 1=1`;
   const params: unknown[] = [];
 
+  // Non-superadmin: masquer les actions effectuées par un superadmin
+  if (!user?.is_super_admin) {
+    sql += ` AND COALESCE(r.is_super_admin, 0) = 0`;
+  }
+
   if (from) { sql += ' AND l.created_at >= ?'; params.push(from); }
   if (to) { sql += ' AND l.created_at <= ?'; params.push(to); }
   if (email) { sql += ' AND r.email LIKE ?'; params.push(`%${email}%`); }
@@ -515,6 +607,58 @@ auditLogsRouter.get('/', async c => {
 });
 
 api.route('/audit-logs', auditLogsRouter);
+
+// ══════════════════════════════════════════════════════════
+// TRACKED AGENTS — Super Admin only
+// ══════════════════════════════════════════════════════════
+const trackedAgentsRouter = new Hono<AppEnv>();
+trackedAgentsRouter.use('*', authMiddleware);
+
+trackedAgentsRouter.get('/', async c => {
+  const user = c.get('user') as JWTPayload;
+  if (!user?.is_super_admin) return c.json({ error: 'Accès refusé' }, 403);
+
+  const superadminId = Number(user.sub);
+  const { results } = await c.env.DB.prepare(
+    `SELECT ta.agent_id,
+            a.nom, a.prenom, a.telephone, a.role, a.quota_gb, a.prix_cfa, a.actif, a.created_at, a.updated_at
+     FROM tracked_agents ta
+     JOIN agents a ON a.id = ta.agent_id
+     WHERE ta.superadmin_responsable_id = ?
+     ORDER BY a.prenom ASC, a.nom ASC, a.id ASC`
+  ).bind(superadminId).all();
+
+  return c.json({ tracked_agents: results ?? [] });
+});
+
+trackedAgentsRouter.put('/', async c => {
+  const user = c.get('user') as JWTPayload;
+  if (!user?.is_super_admin) return c.json({ error: 'Accès refusé' }, 403);
+
+  const body = await c.req.json<{ agent_ids?: number[] }>();
+  const agentIdsRaw = Array.isArray(body?.agent_ids) ? body.agent_ids : [];
+  const agentIds = Array.from(new Set(agentIdsRaw.map(n => Number(n)).filter(n => Number.isFinite(n) && n > 0)));
+
+  const superadminId = Number(user.sub);
+  if (!Number.isFinite(superadminId) || superadminId <= 0) return c.json({ error: 'Utilisateur invalide' }, 400);
+
+  await c.env.DB.prepare(`DELETE FROM tracked_agents WHERE superadmin_responsable_id = ?`).bind(superadminId).run();
+  for (const agentId of agentIds) {
+    await c.env.DB.prepare(
+      `INSERT OR IGNORE INTO tracked_agents (superadmin_responsable_id, agent_id) VALUES (?, ?)`
+    ).bind(superadminId, agentId).run();
+  }
+
+  await c.env.DB.prepare(`INSERT INTO audit_logs (responsable_id, action, details) VALUES (?, ?, ?)`).bind(
+    superadminId,
+    'TRACKED_AGENTS_UPDATED',
+    JSON.stringify({ agent_ids: agentIds, count: agentIds.length })
+  ).run();
+
+  return c.json({ ok: true, agent_ids: agentIds });
+});
+
+api.route('/tracked-agents', trackedAgentsRouter);
 
 // ══════════════════════════════════════════════════════════
 // SESSIONS (présence) — heartbeat + listing Super Admin

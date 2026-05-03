@@ -290,6 +290,7 @@ export function Layout() {
   });
 
   useEffect(() => {
+    if (!isSuperAdmin) return;
     const agents: Agent[] = agentsData?.agents ?? [];
     if (agents.length === 0) return;
 
@@ -328,7 +329,7 @@ export function Layout() {
       toast.info('Quota data', `${quotaChangedCount} agent${quotaChangedCount > 1 ? 's' : ''} mis à jour`);
       qc.invalidateQueries({ queryKey: ['stats'] });
     }
-  }, [agentsData, qc, toast]);
+  }, [agentsData, qc, toast, isSuperAdmin]);
 
   useEffect(() => {
     const uid = user?.email ? String(user.email) : 'anon';
