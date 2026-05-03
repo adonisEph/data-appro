@@ -1,13 +1,12 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { usersApi } from '../lib/api';
+import { agentsApi, usersApi } from '../lib/api';
 import { useToast } from '../components/ui/Toast';
 import { ConfirmModal } from '../components/ui/ConfirmModal';
 import { Card, Button, RoleBadge, Modal, Spinner, EmptyState } from '../components/ui';
 import { useAuth } from '../hooks/useAuth';
 import type { Responsable } from '../types';
 import { fmtDateTime } from '../lib/utils';
-import { rolesMetierApi } from '../lib/api';
 
 const DROITS_LABELS = {
   can_import_agents:   'Importer des agents',
@@ -28,28 +27,31 @@ export default function UtilisateursPage() {
   const [newPassword, setNewPassword]     = useState('');
 
   const [form, setForm] = useState({
-    nom: '', prenom: '', telephone: '', email: '', password: '',
-    role_label: '',
-    quota_gb: 0,
-    prix_cfa: 0,
-    forfait_label: '',
+    agent_id: 0,
+    email: '',
+    password: '',
     is_viewer: false,
-    can_import_agents: true, can_launch_campagne: true,
-    can_view_historique: true, can_manage_users: false,
+    can_import_agents: true,
+    can_launch_campagne: true,
+    can_view_historique: true,
+    can_manage_users: false,
   });
+
+  const [agentSearch, setAgentSearch] = useState('');
 
   const [droits, setDroits] = useState<Record<string, boolean>>({});
 
   const { data, isLoading } = useQuery({ queryKey: ['users'], queryFn: usersApi.list, refetchOnWindowFocus: true, staleTime: 0 });
 
-  const { data: rolesData } = useQuery({
-    queryKey: ['roles-metier'],
-    queryFn: rolesMetierApi.list,
-    staleTime: 60_000,
+  const { data: agentsData } = useQuery({
+    queryKey: ['agents'],
+    queryFn: agentsApi.list,
+    refetchOnWindowFocus: true,
+    staleTime: 0,
   });
-  const rolesMetier = rolesData?.roles ?? [];
-  const activeRolesMetier = rolesMetier.filter(r => r.actif !== 0);
-  const inactiveLabels = new Set(rolesMetier.filter(r => r.actif === 0).map(r => r.label));
+
+  const agents = agentsData?.agents ?? [];
+  const selectedAgent = agents.find(a => a.id === form.agent_id) ?? null;
 
   const createMut = useMutation({
     mutationFn: () => usersApi.create(form),
@@ -57,8 +59,17 @@ export default function UtilisateursPage() {
       qc.invalidateQueries({ queryKey: ['users'] });
       toast.success('Utilisateur créé', form.email);
       setCreateModal(false);
-      setForm({ nom: '', prenom: '', telephone: '', email: '', password: '', role_label: '', quota_gb: 0, prix_cfa: 0, forfait_label: '',
-        can_import_agents: true, can_launch_campagne: true, can_view_historique: true, can_manage_users: false, is_viewer: false });
+      setForm({
+        agent_id: 0,
+        email: '',
+        password: '',
+        can_import_agents: true,
+        can_launch_campagne: true,
+        can_view_historique: true,
+        can_manage_users: false,
+        is_viewer: false,
+      });
+      setAgentSearch('');
     },
     onError: (err: Error) => toast.error('Erreur', err.message),
   });
@@ -227,23 +238,33 @@ export default function UtilisateursPage() {
       {/* Modal Création */}
       <Modal open={createModal} onClose={() => setCreateModal(false)} title="Nouvel utilisateur">
         <div className="space-y-4">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">Prénom *</label>
-              <input type="text" value={form.prenom} onChange={e => setForm(f => ({ ...f, prenom: e.target.value }))}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"/>
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">Nom *</label>
-              <input type="text" value={form.nom} onChange={e => setForm(f => ({ ...f, nom: e.target.value }))}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"/>
-            </div>
-          </div>
           <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1">Téléphone *</label>
-            <input type="tel" value={form.telephone} onChange={e => setForm(f => ({ ...f, telephone: e.target.value }))}
-              placeholder="05 XXX XXXX"
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm font-mono focus:outline-none focus:ring-2 focus:ring-brand-500"/>
+            <label className="block text-xs font-medium text-gray-700 mb-1">Agent *</label>
+            <input
+              type="search"
+              value={agentSearch}
+              onChange={e => {
+                const v = e.target.value;
+                setAgentSearch(v);
+                const m = v.match(/\(#(\d+)\)$/);
+                if (m?.[1]) setForm(f => ({ ...f, agent_id: Number(m[1]) }));
+              }}
+              list="agents-list"
+              placeholder="Rechercher un agent (nom / téléphone)"
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
+            />
+            <datalist id="agents-list">
+              {agents.map(a => (
+                <option key={a.id} value={`${a.prenom} ${a.nom} · ${a.telephone} (#${a.id})`} />
+              ))}
+            </datalist>
+            {selectedAgent ? (
+              <p className="text-xs text-gray-500 mt-1">
+                Sélectionné: <span className="font-semibold">{selectedAgent.prenom} {selectedAgent.nom}</span> · {selectedAgent.telephone}
+              </p>
+            ) : (
+              <p className="text-xs text-gray-400 mt-1">Choisissez un agent existant pour le transformer en utilisateur.</p>
+            )}
           </div>
           <div>
             <label className="block text-xs font-medium text-gray-700 mb-1">Email *</label>
@@ -256,47 +277,7 @@ export default function UtilisateursPage() {
               <input type="password" value={form.password} onChange={e => setForm(f => ({ ...f, password: e.target.value }))}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"/>
             </div>
-            <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">Poste dans l'entreprise</label>
-              {rolesMetier.length > 0 ? (
-                <select value={form.role_label} onChange={e => setForm(f => ({ ...f, role_label: e.target.value }))}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
-                  <option value="">-- Choisir un poste --</option>
-                  {form.role_label && inactiveLabels.has(form.role_label) && (
-                    <option value={form.role_label}>{form.role_label} (désactivé)</option>
-                  )}
-                  {activeRolesMetier.map(r => <option key={r.id} value={r.label}>{r.label}</option>)}
-                </select>
-              ) : (
-                <input type="text" value={form.role_label} onChange={e => setForm(f => ({ ...f, role_label: e.target.value }))}
-                  placeholder="Ex: Ingénieur, Comptable…"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"/>
-              )}
-            </div>
-          </div>
-
-          <div className="bg-blue-50 border border-blue-200 rounded-xl px-4 py-3 text-xs text-blue-800">
-            <strong>Rôle métier ≠ Quota data.</strong> Le poste est indépendant du quota (GB) et du prix CFA.
-            Vous pouvez assigner n'importe quel quota à n'importe quel poste.
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">Quota (GB)</label>
-              <input type="number" step="0.5" value={form.quota_gb} onChange={e => setForm(f => ({ ...f, quota_gb: Number(e.target.value) }))}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"/>
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">Prix CFA</label>
-              <input type="number" value={form.prix_cfa} onChange={e => setForm(f => ({ ...f, prix_cfa: Number(e.target.value) }))}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"/>
-            </div>
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1">Label forfait (optionnel)</label>
-            <input type="text" value={form.forfait_label} onChange={e => setForm(f => ({ ...f, forfait_label: e.target.value }))}
-              placeholder="ex: 6.5GB, 14GB…"
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"/>
+            <div />
           </div>
           <div>
             <label className="block text-xs font-medium text-gray-700 mb-2">Type d'accès</label>
@@ -334,7 +315,7 @@ export default function UtilisateursPage() {
           <div className="flex justify-end gap-3 pt-2">
             <Button variant="secondary" onClick={() => setCreateModal(false)}>Annuler</Button>
             <Button loading={createMut.isPending} onClick={() => {
-              if (!form.nom || !form.telephone || !form.email || !form.password) {
+              if (!form.agent_id || !form.email || !form.password) {
                 toast.warning('Champs requis', 'Remplissez tous les champs obligatoires (*)');
                 return;
               }

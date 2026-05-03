@@ -53,9 +53,8 @@ export const agentsApi = {
 export const usersApi = {
   list:   () => request<{ users: Responsable[] }>('/users'),
   create: (data: {
-    nom: string; prenom: string; telephone: string; email: string; password: string;
-    role?: string; role_label?: string; is_viewer?: boolean;
-    quota_gb?: number; prix_cfa?: number; forfait_label?: string;
+    agent_id: number; email: string; password: string;
+    is_viewer?: boolean;
     can_import_agents?: boolean; can_launch_campagne?: boolean;
     can_view_historique?: boolean; can_manage_users?: boolean;
   }) => request<{ ok: boolean; user_id: number }>('/users', { method: 'POST', body: JSON.stringify(data) }),

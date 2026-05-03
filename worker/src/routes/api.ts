@@ -6,6 +6,7 @@ import { lancerCampagne } from '../services/provisionnement.js';
 
 type Variables = { user: JWTPayload };
 type AppEnv = { Bindings: Env; Variables: Variables };
+
 const api = new Hono<AppEnv>();
 
 // ── Santé ────────────────────────────────────────────────────
@@ -112,11 +113,8 @@ api.post('/auth/change-password', authMiddleware, async c => {
   const newHash = btoa(Array.from(new Uint8Array(newHashBuffer)).map(b => String.fromCharCode(b)).join(''));
   await c.env.DB.prepare(`UPDATE responsables SET password_hash = ? WHERE id = ?`).bind(newHash, resp.id).run();
 
-  await c.env.DB.prepare(`INSERT INTO audit_logs (responsable_id, action, details) VALUES (?, ?, ?)`).bind(
-    resp.id,
-    'USER_PASSWORD_CHANGED',
-    JSON.stringify({ by_self: true })
-  ).run();
+  await c.env.DB.prepare(`INSERT INTO audit_logs (responsable_id, action, details) VALUES (?, ?, ?)`)
+    .bind(resp.id, 'USER_PASSWORD_CHANGED', JSON.stringify({ by_self: true })).run();
 
   return c.json({ ok: true });
 });
@@ -177,8 +175,10 @@ agentsRouter.use('*', authMiddleware);
 agentsRouter.get('/', async c => {
   const { results } = await c.env.DB.prepare(
     `SELECT * FROM agents WHERE actif = 1 ORDER BY nom, prenom`
-  ).all();
-  return c.json({ agents: results, total: results.length });
+  ).all<Record<string, unknown>>();
+
+  const agents = results ?? [];
+  return c.json({ agents, total: agents.length });
 });
 
 agentsRouter.get('/quality-check', async c => {
@@ -849,60 +849,26 @@ usersRouter.get('/', async c => {
 
 usersRouter.post('/', async c => {
   const body = await c.req.json<{
-    nom: string; prenom: string; telephone: string; email: string; password: string;
-    role?: Role; role_label?: string; is_viewer?: boolean;
-    quota_gb?: number; prix_cfa?: number; forfait_label?: string;
+    agent_id: number; email: string; password: string;
+    is_viewer?: boolean;
     can_import_agents?: boolean; can_launch_campagne?: boolean;
     can_view_historique?: boolean; can_manage_users?: boolean;
   }>();
 
-  const { nom, prenom, telephone, email, password } = body;
-  if (!nom || !telephone || !email || !password) return c.json({ error: 'Champs requis manquants' }, 400);
+  const agentId = Number(body.agent_id);
+  const email = (body.email ?? '').trim();
+  const password = String(body.password ?? '');
+  if (!Number.isFinite(agentId) || agentId <= 0) return c.json({ error: 'agent_id invalide' }, 400);
+  if (!email || !password) return c.json({ error: 'Champs requis manquants' }, 400);
+  if (password.length < 6) return c.json({ error: 'Mot de passe trop court' }, 400);
 
-  let agentId: number;
-  const existing = await c.env.DB.prepare(`SELECT id FROM agents WHERE telephone = ?`).bind(telephone).first<{ id: number }>();
-  if (existing) {
-    agentId = existing.id;
+  const agent = await c.env.DB.prepare(`SELECT id FROM agents WHERE id = ? LIMIT 1`).bind(agentId).first<{ id: number }>();
+  if (!agent) return c.json({ error: 'Agent introuvable' }, 404);
 
-    // Mettre à jour les infos agent si elles sont fournies
-    await c.env.DB.prepare(
-      `UPDATE agents
-       SET nom = ?, prenom = ?,
-           role_label = COALESCE(?, role_label),
-           quota_gb = COALESCE(?, quota_gb),
-           prix_cfa = COALESCE(?, prix_cfa),
-           forfait_label = COALESCE(?, forfait_label)
-       WHERE id = ?`
-    ).bind(
-      nom,
-      prenom || '',
-      body.role_label ? body.role_label : null,
-      body.quota_gb !== undefined ? body.quota_gb : null,
-      body.prix_cfa !== undefined ? body.prix_cfa : null,
-      body.forfait_label ? body.forfait_label : null,
-      agentId
-    ).run();
-  } else {
-    const role: Role = body.role ?? 'manager';
-    const quota = body.quota_gb !== undefined ? body.quota_gb : ROLE_QUOTAS[role];
-    const prix = body.prix_cfa !== undefined ? body.prix_cfa : 0;
-    const inserted = await c.env.DB.prepare(
-      `INSERT INTO agents (nom, prenom, telephone, role, role_label, quota_gb, prix_cfa, forfait_label)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`
-    ).bind(
-      nom,
-      prenom || '',
-      telephone,
-      role,
-      body.role_label ?? null,
-      quota,
-      prix,
-      body.forfait_label ?? null
-    )
-     .first<{ id: number }>();
-    if (!inserted) return c.json({ error: 'Erreur création agent' }, 500);
-    agentId = inserted.id;
-  }
+  const existingUserForAgent = await c.env.DB.prepare(
+    `SELECT id, actif FROM responsables WHERE agent_id = ? LIMIT 1`
+  ).bind(agentId).first<{ id: number; actif: number }>();
+  if (existingUserForAgent) return c.json({ error: 'Cet agent est déjà un utilisateur' }, 409);
 
   const isViewer = body.is_viewer ? 1 : 0;
   const tempInsert = await c.env.DB.prepare(
@@ -929,7 +895,7 @@ usersRouter.post('/', async c => {
 
 usersRouter.put('/:id', async c => {
   const id = Number(c.req.param('id'));
-  const currentUser = c.get('user');
+  const currentUser = c.get('user') as JWTPayload;
   if (id === Number(currentUser.sub)) return c.json({ error: 'Impossible de modifier son propre compte ici' }, 400);
 
   const body = await c.req.json<{
@@ -952,7 +918,7 @@ usersRouter.put('/:id', async c => {
 
 usersRouter.delete('/:id', async c => {
   const id = Number(c.req.param('id'));
-  const currentUser = c.get('user');
+  const currentUser = c.get('user') as JWTPayload;
   if (id === Number(currentUser.sub)) return c.json({ error: 'Impossible de se supprimer soi-même' }, 400);
   await c.env.DB.prepare(`UPDATE responsables SET actif = 0 WHERE id = ?`).bind(id).run();
   await c.env.DB.prepare(`INSERT INTO audit_logs (responsable_id, action, details) VALUES (?, ?, ?)`)
@@ -1033,9 +999,11 @@ campagnesRouter.get('/:id/eligible-agents', async c => {
      ORDER BY nom, prenom`
   ).bind(cutoff).all();
 
+  const agents = results ?? [];
+
   return c.json({
-    agents: results,
-    total: results.length,
+    agents,
+    total: agents.length,
     total_all: totalAll?.n ?? results.length,
     total_active: totalActive?.n ?? results.length,
     deleted_budget_fcfa: deletedBudget?.s ?? 0,
@@ -1071,6 +1039,9 @@ campagnesRouter.post('/', noViewerMiddleware, async c => {
 });
 
 campagnesRouter.get('/:id', async c => {
+  const user = c.get('user') as JWTPayload;
+  const isSuperAdmin = Boolean(user?.is_super_admin);
+
   const id = Number(c.req.param('id'));
   const campagne = await c.env.DB.prepare(`SELECT * FROM campagnes WHERE id = ?`).bind(id).first();
   if (!campagne) return c.json({ error: 'Campagne introuvable' }, 404);
@@ -1158,10 +1129,7 @@ campagnesRouter.get('/:id', async c => {
     console.error('[Campagne Backfill Deleted Agents]', err);
   }
 
-  const user = c.get('user');
-  const isSuperAdmin = Boolean((user as JWTPayload | undefined)?.is_super_admin);
-
-  const { results: transactions } = await c.env.DB.prepare(
+  const { results: transactionsRaw } = await c.env.DB.prepare(
     `SELECT t.*, a.nom, a.prenom, a.role, a.role_label
      FROM transactions t JOIN agents a ON a.id = t.agent_id
      WHERE t.campagne_id = ?
@@ -1169,11 +1137,13 @@ campagnesRouter.get('/:id', async c => {
          ? = 1
          OR NOT (
            t.statut = 'confirme'
-           AND t.airtel_message = 'Confirmé (agent supprimé)'
+           AND COALESCE(t.airtel_message,'') = 'Confirmé (agent supprimé)'
          )
        )
-     ORDER BY t.tente_le DESC`
-  ).bind(id, isSuperAdmin ? 1 : 0).all();
+     ORDER BY t.id DESC`
+  ).bind(id, isSuperAdmin ? 1 : 0).all<Record<string, unknown>>();
+
+  const transactions = transactionsRaw ?? [];
 
   const metrics = await c.env.DB.prepare(
     `SELECT
@@ -1334,6 +1304,7 @@ campagnesRouter.post('/:id/manual/validate', noViewerMiddleware, async c => {
   // Statut final si terminé
   const updated = await c.env.DB.prepare(`SELECT total_agents, agents_ok, agents_echec FROM campagnes WHERE id = ?`)
     .bind(campagneId).first<{ total_agents: number; agents_ok: number; agents_echec: number }>();
+
   if (updated) {
     const done = (updated.agents_ok + updated.agents_echec);
     if (updated.total_agents > 0 && done >= updated.total_agents) {
@@ -1385,13 +1356,18 @@ historiqueRouter.get('/transactions', async c => {
   if (agent_id)    { query += ' AND t.agent_id = ?';    params.push(Number(agent_id)); }
   if (campagne_id) { query += ' AND t.campagne_id = ?'; params.push(Number(campagne_id)); }
   if (statut)      { query += ' AND t.statut = ?';      params.push(statut); }
-  if (telephone)   { query += ' AND t.telephone LIKE ?'; params.push(`%${telephone}%`); }
+  if (telephone)   {
+    const normalizedTel = String(telephone).replace(/\D/g, '').trim();
+    query += ' AND t.telephone LIKE ?';
+    params.push(`%${normalizedTel || telephone}%`);
+  }
   if (!isSuperAdmin) {
     query += " AND NOT (t.statut = 'confirme' AND t.airtel_message = 'Confirmé (agent supprimé)')";
   }
-  query += ' ORDER BY t.tente_le DESC LIMIT 500';
+  query += ' ORDER BY t.id DESC LIMIT 500';
   const { results } = await c.env.DB.prepare(query).bind(...params).all();
-  return c.json({ transactions: results, total: results.length });
+  const transactions = results ?? [];
+  return c.json({ transactions, total: transactions.length });
 });
 
 historiqueRouter.get('/transactions/:id/preuve', async c => {
