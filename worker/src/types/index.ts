@@ -112,6 +112,10 @@ export interface JWTPayload {
   agent_id: number;
   is_super_admin: boolean;
   is_viewer: boolean;
+  can_import_agents: boolean;
+  can_launch_campagne: boolean;
+  can_view_historique: boolean;
+  can_manage_users: boolean;
   iat: number;
   exp: number;
 }

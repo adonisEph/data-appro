@@ -80,7 +80,7 @@ export default function UtilisateursPage() {
   });
 
   const updateMut = useMutation({
-    mutationFn: ({ id, data }: { id: number; data: Record<string, boolean> }) =>
+    mutationFn: ({ id, data }: { id: number; data: Parameters<typeof usersApi.updateDroits>[1] }) =>
       usersApi.updateDroits(id, data),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['users'] });

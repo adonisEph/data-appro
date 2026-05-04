@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import type { Env, Role, JWTPayload } from '../types/index.js';
 import { MONTANTS_FCFA, ROLE_QUOTAS } from '../types/index.js';
-import { authMiddleware, superAdminMiddleware, noViewerMiddleware, generateJWT } from '../middleware/auth.js';
+import { authMiddleware, superAdminMiddleware, noViewerMiddleware, requireCanImportAgents, requireCanLaunchCampagne, requireCanViewHistorique, generateJWT } from '../middleware/auth.js';
 import { lancerCampagne } from '../services/provisionnement.js';
 
 type Variables = { user: JWTPayload };
@@ -49,6 +49,10 @@ api.post('/auth/login', async c => {
       agent_id: resp.agent_id,
       is_super_admin: resp.is_super_admin === 1,
       is_viewer: resp.is_viewer === 1,
+      can_import_agents: resp.can_import_agents === 1,
+      can_launch_campagne: resp.can_launch_campagne === 1,
+      can_view_historique: resp.can_view_historique === 1,
+      can_manage_users: resp.can_manage_users === 1,
     });
 
     try {
@@ -320,7 +324,7 @@ agentsRouter.post('/', noViewerMiddleware, async c => {
   }
 });
 
-agentsRouter.post('/import', noViewerMiddleware, async c => {
+agentsRouter.post('/import', noViewerMiddleware, requireCanImportAgents, async c => {
   const { agents } = await c.req.json<{
     agents: Array<{
       nom: string; prenom: string; telephone: string; role: Role;
@@ -1035,7 +1039,7 @@ campagnesRouter.get('/:id/eligible-agents', async c => {
   });
 });
 
-campagnesRouter.post('/', noViewerMiddleware, async c => {
+campagnesRouter.post('/', noViewerMiddleware, requireCanLaunchCampagne, async c => {
   const user = c.get('user');
   const { mois, budget_fcfa, compte_source, option_envoi, mode } = await c.req.json<{
     mois: string; budget_fcfa: number; compte_source: string; option_envoi: string; mode?: string;
@@ -1181,7 +1185,7 @@ campagnesRouter.get('/:id', async c => {
   return c.json({ campagne, transactions, metrics: metrics ?? { confirmes: 0, echecs: 0, budget_confirme_fcfa: 0 } });
 });
 
-campagnesRouter.post('/:id/lancer', noViewerMiddleware, async c => {
+campagnesRouter.post('/:id/lancer', noViewerMiddleware, requireCanLaunchCampagne, async c => {
   const id = Number(c.req.param('id'));
   const campagne = await c.env.DB.prepare(`SELECT * FROM campagnes WHERE id = ?`)
     .bind(id).first<import('../types/index.js').Campagne>();
@@ -1212,7 +1216,7 @@ campagnesRouter.post('/:id/lancer', noViewerMiddleware, async c => {
   return c.json({ ok: true, message: `Provisionnement lancé pour ${agents.length} agent(s)`, mode: body.agent_ids ? 'test_ciblé' : 'tous_agents' });
 });
 
-campagnesRouter.post('/:id/manual/validate', noViewerMiddleware, async c => {
+campagnesRouter.post('/:id/manual/validate', noViewerMiddleware, requireCanLaunchCampagne, async c => {
   const campagneId = Number(c.req.param('id'));
   const user = c.get('user');
   const body = await c.req.json<{
@@ -1368,7 +1372,7 @@ api.route('/campagnes', campagnesRouter);
 // HISTORIQUE
 // ══════════════════════════════════════════════════════════
 const historiqueRouter = new Hono<AppEnv>();
-historiqueRouter.use('*', authMiddleware);
+historiqueRouter.use('*', authMiddleware, requireCanViewHistorique);
 
 historiqueRouter.get('/transactions', async c => {
   const { agent_id, campagne_id, statut, telephone } = c.req.query();
@@ -1436,7 +1440,7 @@ api.route('/historique', historiqueRouter);
 // RELANCE + EXPORT CSV
 // ══════════════════════════════════════════════════════════
 const relanceRouter = new Hono<AppEnv>();
-relanceRouter.use('*', authMiddleware, noViewerMiddleware);
+relanceRouter.use('*', authMiddleware, noViewerMiddleware, requireCanLaunchCampagne);
 
 relanceRouter.post('/campagnes/:id/relancer-echecs', async c => {
   const id = Number(c.req.param('id'));

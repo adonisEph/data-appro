@@ -20,7 +20,8 @@ import { fmtFCFA, fmtMois, fmtTelephone, fmtPct } from '../lib/utils';
 export function CampagnesPage() {
   const qc = useQueryClient();
   const toast = useToast();
-  const { isSuperAdmin } = useAuth();
+  const { isSuperAdmin, user } = useAuth();
+  const canLaunch = isSuperAdmin || Boolean(user?.droits?.can_launch_campagne);
   const [deleteCampagne, setDeleteCampagne] = useState<import('../types').Campagne | null>(null);
 
   useQuery({
@@ -63,14 +64,16 @@ export function CampagnesPage() {
           <h1 className="text-2xl font-bold text-gray-900">Campagnes</h1>
           <p className="text-sm text-gray-500 mt-0.5">Historique des approvisionnements mensuels</p>
         </div>
-        <Link to="/campagnes/nouvelle">
-          <Button size="sm">
-            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4"/>
-            </svg>
-            Nouvelle campagne
-          </Button>
-        </Link>
+        {canLaunch && (
+          <Link to="/campagnes/nouvelle">
+            <Button size="sm">
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4"/>
+              </svg>
+              Nouvelle campagne
+            </Button>
+          </Link>
+        )}
       </div>
 
       {isLoading ? (
@@ -79,7 +82,7 @@ export function CampagnesPage() {
         <EmptyState
           title="Aucune campagne"
           description="Créez votre première campagne d'approvisionnement."
-          action={<Link to="/campagnes/nouvelle"><Button size="sm">Nouvelle campagne</Button></Link>}
+          action={canLaunch ? <Link to="/campagnes/nouvelle"><Button size="sm">Nouvelle campagne</Button></Link> : undefined}
         />
       ) : (
         <div className="space-y-3">
@@ -184,7 +187,8 @@ export function CampagneDetailPage() {
   const qc = useQueryClient();
   const toast = useToast();
   const navigate = useNavigate();
-  const { isSuperAdmin } = useAuth();
+  const { isSuperAdmin, user } = useAuth();
+  const canLaunch = isSuperAdmin || Boolean(user?.droits?.can_launch_campagne);
   const [filterStatut, setFilterStatut] = useState('');
   const [search, setSearch] = useState('');
   const [confirmLancer, setConfirmLancer] = useState(false);
@@ -478,8 +482,8 @@ export function CampagneDetailPage() {
           <Button
             loading={lancerMut.isPending}
             onClick={() => setConfirmLancer(true)}
-            disabled={isManual}
-            title={isManual ? 'Mode manuel : lancement automatique désactivé' : undefined}
+            disabled={isManual || !canLaunch}
+            title={!canLaunch ? 'Droit "Lancer des campagnes" requis' : (isManual ? 'Mode manuel : lancement automatique désactivé' : undefined)}
           >
             {isManual
               ? '🚫 Lancer auto (désactivé)'
@@ -488,7 +492,7 @@ export function CampagneDetailPage() {
                 : '🚀 Lancer le provisionnement')}
           </Button>
         )}
-        {campagne.agents_echec > 0 && !isLive && (
+        {campagne.agents_echec > 0 && !isLive && canLaunch && (
           <Button variant="secondary" loading={relancerMut.isPending} onClick={() => setConfirmRelancer(true)}>
             🔄 Relancer les échecs ({campagne.agents_echec})
           </Button>
@@ -647,7 +651,9 @@ export function CampagneDetailPage() {
                               sms: tx?.airtel_message ?? '',
                               montant_fcfa: a.prix_cfa,
                             })}
+                            disabled={!canLaunch}
                             className="text-brand-600 hover:text-brand-800 text-xs font-medium px-2 py-1 rounded hover:bg-brand-50"
+                            title={!canLaunch ? 'Droit "Lancer des campagnes" requis' : undefined}
                           >
                             Valider (argent)
                           </button>
@@ -660,7 +666,9 @@ export function CampagneDetailPage() {
                               statut: 'confirme',
                               sms: tx?.airtel_message ?? '',
                             })}
+                            disabled={!canLaunch}
                             className="text-amber-700 hover:text-amber-900 text-xs font-medium px-2 py-1 rounded hover:bg-amber-50"
+                            title={!canLaunch ? 'Droit "Lancer des campagnes" requis' : undefined}
                           >
                             Valider (forfait)
                           </button>
@@ -739,7 +747,9 @@ export function CampagneDetailPage() {
               <Button variant="secondary" onClick={() => setManualModal(null)}>Annuler</Button>
               <Button
                 loading={manualMut.isPending}
+                disabled={!canLaunch}
                 onClick={() => {
+                  if (!canLaunch) { toast.warning('Accès refusé', 'Droit "Lancer des campagnes" requis'); return; }
                   if (!manualModal.sms.trim()) { toast.warning('SMS requis', 'Collez le SMS complet pour preuve.'); return; }
                   manualMut.mutate({
                     agent_id: manualModal.agent_id,
@@ -826,6 +836,8 @@ export function NouvelleCampagnePage() {
   const navigate = useNavigate();
   const qc = useQueryClient();
   const toast = useToast();
+  const { isSuperAdmin, user } = useAuth();
+  const canLaunch = isSuperAdmin || Boolean(user?.droits?.can_launch_campagne);
   const [qualityConfirm, setQualityConfirm] = useState<null | {
     phone_duplicates: number;
     invalid_phones: number;
@@ -879,6 +891,27 @@ export function NouvelleCampagnePage() {
       toast.error('Erreur', msg);
     }
   };
+
+  if (!canLaunch) {
+    return (
+      <div className="p-6 max-w-3xl mx-auto space-y-6">
+        <div className="flex items-center gap-3">
+          <Link to="/campagnes" className="text-gray-400 hover:text-gray-600">
+            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7"/>
+            </svg>
+          </Link>
+          <h1 className="text-2xl font-bold text-gray-900">Nouvelle campagne</h1>
+        </div>
+        <Card>
+          <div className="py-10 text-center">
+            <p className="text-sm font-semibold text-gray-900">Accès refusé</p>
+            <p className="text-sm text-gray-500 mt-1">Tu n'as pas le droit "Lancer des campagnes".</p>
+          </div>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="p-6 max-w-2xl mx-auto space-y-6">

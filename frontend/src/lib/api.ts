@@ -50,6 +50,16 @@ export const agentsApi = {
 };
 
 // Utilisateurs
+type UpdateUserPayload = {
+  email?: string;
+  is_viewer?: boolean;
+  actif?: boolean;
+  can_import_agents?: boolean;
+  can_launch_campagne?: boolean;
+  can_view_historique?: boolean;
+  can_manage_users?: boolean;
+};
+
 export const usersApi = {
   list:   () => request<{ users: Responsable[] }>('/users'),
   create: (data: {
@@ -58,7 +68,7 @@ export const usersApi = {
     can_import_agents?: boolean; can_launch_campagne?: boolean;
     can_view_historique?: boolean; can_manage_users?: boolean;
   }) => request<{ ok: boolean; user_id: number }>('/users', { method: 'POST', body: JSON.stringify(data) }),
-  updateDroits: (id: number, data: Record<string, boolean>) =>
+  updateDroits: (id: number, data: UpdateUserPayload) =>
     request<{ ok: boolean }>(`/users/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   delete: (id: number) =>
     request<{ ok: boolean }>(`/users/${id}`, { method: 'DELETE' }),

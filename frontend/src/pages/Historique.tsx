@@ -9,7 +9,25 @@ export default function HistoriquePage() {
   const [filters, setFilters]   = useState({ telephone: '', statut: '', campagne_id: '' });
   const [applied, setApplied]   = useState<typeof filters>({ telephone: '', statut: '', campagne_id: '' });
   const [preuveId, setPreuveId] = useState<number | null>(null);
-  const { isSuperAdmin } = useAuth();
+  const { isSuperAdmin, user } = useAuth();
+
+  const canView = isSuperAdmin || Boolean(user?.droits?.can_view_historique);
+  if (!canView) {
+    return (
+      <div className="p-4 md:p-6 max-w-6xl mx-auto space-y-4 md:space-y-6">
+        <div>
+          <h1 className="text-xl md:text-2xl font-bold text-gray-900">Historique & Audit</h1>
+          <p className="text-sm text-gray-500 mt-0.5">Preuves d'envoi et gestion des litiges</p>
+        </div>
+        <Card>
+          <div className="py-10 text-center">
+            <p className="text-sm font-semibold text-gray-900">Accès refusé</p>
+            <p className="text-sm text-gray-500 mt-1">Tu n'as pas le droit "Voir l'historique".</p>
+          </div>
+        </Card>
+      </div>
+    );
+  }
 
   const { data, isLoading } = useQuery({
     queryKey: ['transactions', applied],

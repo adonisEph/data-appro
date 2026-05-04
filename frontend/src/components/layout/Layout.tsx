@@ -595,7 +595,11 @@ export function Layout() {
 
       {/* Nav */}
       <nav className="flex-1 px-3 py-4 space-y-0.5 overflow-y-auto">
-        {NAV.map(({ to, label, icon, exact }) => (
+        {NAV.filter(({ to }) => {
+          if (to !== '/historique') return true;
+          if (isSuperAdmin) return true;
+          return Boolean(user?.droits?.can_view_historique);
+        }).map(({ to, label, icon, exact }) => (
           <NavLink key={to} to={to} end={exact}
             className={({ isActive }) => clsx(
               'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all',

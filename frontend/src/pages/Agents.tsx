@@ -21,7 +21,9 @@ export default function AgentsPage() {
   const qc = useQueryClient();
   const fileRef = useRef<HTMLInputElement>(null);
   const toast = useToast();
-  const { isSuperAdmin, isViewer } = useAuth();
+  const { isSuperAdmin, isViewer, user } = useAuth();
+
+  const canImportAgents = isSuperAdmin || Boolean(user?.droits?.can_import_agents);
 
   const [trackedModal, setTrackedModal] = useState(false);
   const [trackedText, setTrackedText] = useState('');
@@ -309,7 +311,14 @@ export default function AgentsPage() {
             <span className="hidden sm:inline">Exporter Excel</span>
             <span className="sm:hidden">Export</span>
           </Button>
-          <Button variant="secondary" size="sm" onClick={() => fileRef.current?.click()} disabled={isViewer} className="w-full sm:w-auto">
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={() => fileRef.current?.click()}
+            disabled={isViewer || !canImportAgents}
+            className="w-full sm:w-auto"
+            title={!isViewer && !canImportAgents ? 'Droit "Importer des agents" requis' : undefined}
+          >
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3 3m0 0l3-3m-3 3V10"/>
             </svg>
