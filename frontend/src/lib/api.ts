@@ -36,7 +36,7 @@ export const rolesMetierApi = {
 
 // Agents
 export const agentsApi = {
-  list:   () => request<{ agents: Agent[]; total: number }>('/agents'),
+  list:   () => request<{ agents: Agent[]; total: number; total_active: number; budget_total_agents: number }>('/agents'),
   get:    (id: number) => request<{ agent: Agent }>(`/agents/${id}`),
   qualityCheck: () => request<{ phone_duplicates: Array<{ telephone: string; agents: Array<{ id: number; nom: string; prenom: string; actif: number }> }>; name_duplicates: Array<{ nom: string; prenom: string; agents: Array<{ id: number; telephone: string; actif: number }> }>; invalid_phones: Array<{ id: number; nom: string; prenom: string; telephone: string; actif: number }>; summary: { phone_duplicates: number; name_duplicates: number; invalid_phones: number; total_agents: number } }>(`/agents/quality-check`),
   create: (data: Partial<Agent>) =>

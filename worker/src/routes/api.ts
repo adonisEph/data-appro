@@ -189,18 +189,36 @@ agentsRouter.use('*', authMiddleware);
 agentsRouter.get('/', async c => {
   const user = c.get('user') as JWTPayload;
   const isSuperAdmin = Boolean(user?.is_super_admin);
+
+  const totalActive = await c.env.DB.prepare(
+    `SELECT COUNT(*) as n FROM agents WHERE actif = 1`
+  ).first<{ n: number }>();
+  const budgetTotalAgents = await c.env.DB.prepare(
+    `SELECT COALESCE(SUM(COALESCE(prix_cfa, 0)), 0) as n FROM agents WHERE actif = 1`
+  ).first<{ n: number }>();
+
   const { results } = await c.env.DB.prepare(
     `SELECT * FROM agents WHERE actif = 1 ORDER BY nom, prenom`
   ).all<Record<string, unknown>>();
 
   const agentsAll = results ?? [];
   if (isSuperAdmin) {
-    return c.json({ agents: agentsAll, total: agentsAll.length });
+    return c.json({
+      agents: agentsAll,
+      total: agentsAll.length,
+      total_active: totalActive?.n ?? agentsAll.length,
+      budget_total_agents: budgetTotalAgents?.n ?? 0,
+    });
   }
 
   const trackedSet = await fetchTrackedAgentIdSet(c.env.DB);
   const agents = agentsAll.filter(a => !isTrackedAgentId(trackedSet, (a as { id?: unknown }).id));
-  return c.json({ agents, total: agents.length });
+  return c.json({
+    agents,
+    total: agents.length,
+    total_active: totalActive?.n ?? agentsAll.length,
+    budget_total_agents: budgetTotalAgents?.n ?? 0,
+  });
 });
 
 agentsRouter.get('/quality-check', async c => {

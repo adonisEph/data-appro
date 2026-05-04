@@ -205,6 +205,7 @@ export default function AgentsPage() {
   };
 
   const agents = data?.agents ?? [];
+  const totalActive = data?.total_active ?? agents.length;
   const filtered = agents.filter(a => {
     const s = search.toLowerCase();
     const matchSearch = !search ||
@@ -263,7 +264,7 @@ export default function AgentsPage() {
     return acc;
   }, {} as Record<string, number>);
 
-  const budgetTotal = filtered.reduce((sum, a) => sum + (a.prix_cfa ?? 0), 0);
+  const budgetTotal = data?.budget_total_agents ?? filtered.reduce((sum, a) => sum + (a.prix_cfa ?? 0), 0);
   const quotaEntries = Object.entries(quotaGroups).sort((a, b) => parseFloat(a[0]) - parseFloat(b[0]));
   const quotaEntriesShown = showAllQuotas ? quotaEntries : quotaEntries.slice(0, 4);
 
@@ -278,7 +279,8 @@ export default function AgentsPage() {
         <div>
           <h1 className="text-xl md:text-2xl font-bold text-gray-900">Agents</h1>
           <div className="flex items-center gap-3 mt-0.5">
-            <p className="text-sm text-gray-500">{agents.length} agents actifs</p>
+            <p className="text-sm text-gray-500">{filtered.length} agents affichés</p>
+            <p className="text-sm text-gray-500">{totalActive} agents actifs</p>
             {lastUpdated && (
               <span className="text-xs text-gray-400 flex items-center gap-1">
                 <span className="w-1.5 h-1.5 bg-green-400 rounded-full animate-pulse"/>
