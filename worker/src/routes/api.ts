@@ -9,6 +9,20 @@ type AppEnv = { Bindings: Env; Variables: Variables };
 
 const api = new Hono<AppEnv>();
 
+async function fetchTrackedAgentIdSet(db: Env['DB']): Promise<Set<number>> {
+  const { results } = await db.prepare(`SELECT DISTINCT agent_id FROM tracked_agents`).all<{ agent_id: number }>();
+  return new Set<number>((results ?? []).map(r => Number(r.agent_id)).filter(n => Number.isFinite(n) && n > 0));
+}
+
+function maskTelephoneForNonSuperAdmin(tel: unknown): unknown {
+  if (typeof tel !== 'string') return tel;
+  const digits = tel.replace(/\D/g, '');
+  if (!digits) return tel;
+  // Masquer tous les chiffres sauf les 2 derniers
+  const maskedDigits = digits.replace(/\d(?=\d{2})/g, '*');
+  return tel.replace(digits, maskedDigits);
+}
+
 // ── Santé ────────────────────────────────────────────────────
 api.get('/health', c => c.json({ ok: true, service: 'data-appro-worker', ts: new Date().toISOString() }));
 
@@ -177,15 +191,30 @@ const agentsRouter = new Hono<AppEnv>();
 agentsRouter.use('*', authMiddleware);
 
 agentsRouter.get('/', async c => {
+  const user = c.get('user') as JWTPayload;
+  const isSuperAdmin = Boolean(user?.is_super_admin);
   const { results } = await c.env.DB.prepare(
     `SELECT * FROM agents WHERE actif = 1 ORDER BY nom, prenom`
   ).all<Record<string, unknown>>();
 
   const agents = results ?? [];
+
+  if (!isSuperAdmin) {
+    const trackedSet = await fetchTrackedAgentIdSet(c.env.DB);
+    for (const a of agents) {
+      const aid = Number((a as { id?: number }).id);
+      if (trackedSet.has(aid)) {
+        (a as { telephone?: unknown }).telephone = maskTelephoneForNonSuperAdmin((a as { telephone?: unknown }).telephone);
+      }
+    }
+  }
   return c.json({ agents, total: agents.length });
 });
 
 agentsRouter.get('/quality-check', async c => {
+  const user = c.get('user') as JWTPayload;
+  const isSuperAdmin = Boolean(user?.is_super_admin);
+  const trackedSet = !isSuperAdmin ? await fetchTrackedAgentIdSet(c.env.DB) : new Set<number>();
   const { results: allAgents } = await c.env.DB.prepare(
     `SELECT id, nom, prenom, telephone, actif, created_at, updated_at
      FROM agents
@@ -201,6 +230,14 @@ agentsRouter.get('/quality-check', async c => {
   }>();
 
   const agents = allAgents ?? [];
+
+  if (!isSuperAdmin && trackedSet.size > 0) {
+    for (const a of agents) {
+      if (trackedSet.has(a.id)) {
+        a.telephone = String(maskTelephoneForNonSuperAdmin(a.telephone));
+      }
+    }
+  }
 
   const normalizePhone = (s: string) => (s ?? '').replace(/\s+/g, '').trim();
   const normalizeName = (s: string) => (s ?? '').trim().toLowerCase();
@@ -268,11 +305,12 @@ agentsRouter.get('/:id', async c => {
   return c.json({ agent });
 });
 
-agentsRouter.post('/', noViewerMiddleware, async c => {
+agentsRouter.post('/', noViewerMiddleware, requireCanImportAgents, async c => {
   const body = await c.req.json<{
     nom: string; prenom: string; telephone: string;
     role?: Role; role_label?: string | null;
-    quota_gb?: number; prix_cfa?: number; forfait_label?: string | null;
+    quota_gb?: number; prix_cfa?: number;
+    forfait_label?: string | null;
   }>();
 
   const nom = (body.nom ?? '').trim();
@@ -569,6 +607,7 @@ auditLogsRouter.use('*', authMiddleware);
 
 auditLogsRouter.get('/', async c => {
   const user = c.get('user') as JWTPayload;
+  const isSuperAdmin = Boolean(user?.is_super_admin);
   const q = c.req.query();
   const from = q.from ? String(q.from) : null;
   const to = q.to ? String(q.to) : null;
@@ -607,7 +646,19 @@ auditLogsRouter.get('/', async c => {
   params.push(limit, offset);
 
   const { results } = await c.env.DB.prepare(sql).bind(...params).all();
-  return c.json({ logs: results ?? [], limit, offset });
+  const logs = results ?? [];
+
+  if (!isSuperAdmin) {
+    const trackedSet = await fetchTrackedAgentIdSet(c.env.DB);
+    for (const l of logs) {
+      const aid = Number((l as { agent_id?: number }).agent_id);
+      if (trackedSet.has(aid)) {
+        (l as { agent_telephone?: unknown }).agent_telephone = maskTelephoneForNonSuperAdmin((l as { agent_telephone?: unknown }).agent_telephone);
+      }
+    }
+  }
+
+  return c.json({ logs, limit, offset });
 });
 
 api.route('/audit-logs', auditLogsRouter);
@@ -998,6 +1049,8 @@ campagnesRouter.get('/', async c => {
 });
 
 campagnesRouter.get('/:id/eligible-agents', async c => {
+  const user = c.get('user') as JWTPayload;
+  const isSuperAdmin = Boolean(user?.is_super_admin);
   const id = Number(c.req.param('id'));
   const campagne = await c.env.DB.prepare(`SELECT lance_le, created_at FROM campagnes WHERE id = ?`).bind(id).first<{ lance_le: string | null; created_at: string }>();
   if (!campagne) return c.json({ error: 'Campagne introuvable' }, 404);
@@ -1069,6 +1122,7 @@ campagnesRouter.post('/', noViewerMiddleware, requireCanLaunchCampagne, async c 
 campagnesRouter.get('/:id', async c => {
   const user = c.get('user') as JWTPayload;
   const isSuperAdmin = Boolean(user?.is_super_admin);
+  const trackedSet = !isSuperAdmin ? await fetchTrackedAgentIdSet(c.env.DB) : new Set<number>();
 
   const id = Number(c.req.param('id'));
   const campagne = await c.env.DB.prepare(`SELECT * FROM campagnes WHERE id = ?`).bind(id).first();
@@ -1172,6 +1226,15 @@ campagnesRouter.get('/:id', async c => {
   ).bind(id, isSuperAdmin ? 1 : 0).all<Record<string, unknown>>();
 
   const transactions = transactionsRaw ?? [];
+
+  if (!isSuperAdmin && trackedSet.size > 0) {
+    for (const tx of transactions) {
+      const aid = Number((tx as { agent_id?: number }).agent_id);
+      if (trackedSet.has(aid)) {
+        (tx as { telephone?: unknown }).telephone = maskTelephoneForNonSuperAdmin((tx as { telephone?: unknown }).telephone);
+      }
+    }
+  }
 
   const metrics = await c.env.DB.prepare(
     `SELECT
@@ -1378,6 +1441,7 @@ historiqueRouter.get('/transactions', async c => {
   const { agent_id, campagne_id, statut, telephone } = c.req.query();
   const user = c.get('user');
   const isSuperAdmin = Boolean((user as JWTPayload | undefined)?.is_super_admin);
+  const trackedSet = !isSuperAdmin ? await fetchTrackedAgentIdSet(c.env.DB) : new Set<number>();
   let query = `SELECT t.*, a.nom, a.prenom, a.role, a.role_label, c.mois
                FROM transactions t JOIN agents a ON a.id = t.agent_id JOIN campagnes c ON c.id = t.campagne_id WHERE 1=1`;
   const params: unknown[] = [];
@@ -1395,6 +1459,14 @@ historiqueRouter.get('/transactions', async c => {
   query += ' ORDER BY t.id DESC LIMIT 500';
   const { results } = await c.env.DB.prepare(query).bind(...params).all();
   const transactions = results ?? [];
+  if (!isSuperAdmin && trackedSet.size > 0) {
+    for (const tx of transactions) {
+      const aid = Number((tx as { agent_id?: number }).agent_id);
+      if (trackedSet.has(aid)) {
+        (tx as { telephone?: unknown }).telephone = maskTelephoneForNonSuperAdmin((tx as { telephone?: unknown }).telephone);
+      }
+    }
+  }
   return c.json({ transactions, total: transactions.length });
 });
 
@@ -1402,6 +1474,7 @@ historiqueRouter.get('/transactions/:id/preuve', async c => {
   const id = Number(c.req.param('id'));
   const user = c.get('user');
   const isSuperAdmin = Boolean((user as JWTPayload | undefined)?.is_super_admin);
+  const trackedSet = !isSuperAdmin ? await fetchTrackedAgentIdSet(c.env.DB) : new Set<number>();
   const tx = await c.env.DB.prepare(
     `SELECT t.*, a.nom, a.prenom, a.telephone as agent_tel, a.role, a.role_label, c.mois, c.budget_fcfa, c.compte_source
      FROM transactions t JOIN agents a ON a.id = t.agent_id JOIN campagnes c ON c.id = t.campagne_id WHERE t.id = ?`
@@ -1413,6 +1486,14 @@ historiqueRouter.get('/transactions/:id/preuve', async c => {
     const airtelMessage = (tx as { airtel_message?: string | null }).airtel_message;
     if (statut === 'confirme' && airtelMessage === 'Confirmé (agent supprimé)') {
       return c.json({ error: 'Transaction introuvable' }, 404);
+    }
+  }
+
+  if (!isSuperAdmin && tx && trackedSet.size > 0) {
+    const aid = Number((tx as { agent_id?: number }).agent_id);
+    if (trackedSet.has(aid)) {
+      (tx as { telephone?: unknown }).telephone = maskTelephoneForNonSuperAdmin((tx as { telephone?: unknown }).telephone);
+      (tx as { agent_tel?: unknown }).agent_tel = maskTelephoneForNonSuperAdmin((tx as { agent_tel?: unknown }).agent_tel);
     }
   }
 
@@ -1452,6 +1533,9 @@ relanceRouter.post('/campagnes/:id/relancer-echecs', async c => {
 });
 
 relanceRouter.get('/campagnes/:id/export.csv', async c => {
+  const user = c.get('user') as JWTPayload;
+  const isSuperAdmin = Boolean(user?.is_super_admin);
+  const trackedSet = !isSuperAdmin ? await fetchTrackedAgentIdSet(c.env.DB) : new Set<number>();
   const id = Number(c.req.param('id'));
   const campagne = await c.env.DB.prepare(`SELECT mois FROM campagnes WHERE id = ?`).bind(id).first<{ mois: string }>();
   if (!campagne) return c.json({ error: 'Campagne introuvable' }, 404);
@@ -1460,8 +1544,22 @@ relanceRouter.get('/campagnes/:id/export.csv', async c => {
             t.airtel_transaction_id, t.airtel_reference, t.airtel_message, t.montant_fcfa, t.tente_le, t.confirme_le, t.nb_tentatives
      FROM transactions t JOIN agents a ON a.id = t.agent_id WHERE t.campagne_id = ? ORDER BY a.nom, a.prenom`
   ).bind(id).all<Record<string, string | number | null>>();
+  const rowsRaw = results ?? [];
+  if (!isSuperAdmin && trackedSet.size > 0) {
+    for (const r of rowsRaw) {
+      const tel = r['telephone'];
+      if (typeof tel === 'string') {
+        // Ici on n'a pas l'agent_id, donc on masque si le téléphone appartient à un agent suivi.
+        // On tente de retrouver l'agent_id via une requête légère.
+        const agent = await c.env.DB.prepare(`SELECT id FROM agents WHERE telephone = ?`).bind(tel).first<{ id: number }>();
+        if (agent && trackedSet.has(Number(agent.id))) {
+          r['telephone'] = String(maskTelephoneForNonSuperAdmin(tel));
+        }
+      }
+    }
+  }
   const headers = ['Nom','Prénom','Téléphone','Rôle technique','Poste','Option','Statut','ID Airtel','Référence','Message','Montant FCFA','Date tentative','Date confirmation','Nb tentatives'];
-  const rows = results.map(r =>
+  const rows = rowsRaw.map(r =>
     [r['nom'],r['prenom'],r['telephone'],r['role'],r['role_label']??'',r['option_used'],r['statut'],
      r['airtel_transaction_id']??'',r['airtel_reference']??'',r['airtel_message']??'',
      r['montant_fcfa']??'',r['tente_le'],r['confirme_le']??'',r['nb_tentatives']]

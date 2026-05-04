@@ -24,6 +24,7 @@ export default function AgentsPage() {
   const { isSuperAdmin, isViewer, user } = useAuth();
 
   const canImportAgents = isSuperAdmin || Boolean(user?.droits?.can_import_agents);
+  const canCreateAgent = !isViewer && canImportAgents;
 
   const [trackedModal, setTrackedModal] = useState(false);
   const [trackedText, setTrackedText] = useState('');
@@ -297,14 +298,28 @@ export default function AgentsPage() {
               <span className="sm:hidden">Suivis</span>
             </Button>
           )}
-          <Button variant="secondary" size="sm" onClick={() => { setQualityForceOpen(true); qualityMut.mutate(); }} disabled={qualityMut.isPending} className="w-full sm:w-auto">
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={() => { setQualityForceOpen(true); qualityMut.mutate(); }}
+            disabled={qualityMut.isPending || (!isSuperAdmin && !isViewer)}
+            title={!isSuperAdmin && !isViewer ? 'Réservé au superadmin' : undefined}
+            className="w-full sm:w-auto"
+          >
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-3-3v6m9-3a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
             <span className="hidden sm:inline">Vérifier les doublons</span>
             <span className="sm:hidden">Doublons</span>
           </Button>
-          <Button variant="secondary" size="sm" onClick={exportExcel} disabled={filtered.length === 0 || isViewer} className="w-full sm:w-auto">
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={exportExcel}
+            disabled={filtered.length === 0 || isViewer || (!isSuperAdmin && !isViewer)}
+            title={!isSuperAdmin && !isViewer ? 'Réservé au superadmin' : undefined}
+            className="w-full sm:w-auto"
+          >
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
             </svg>
@@ -325,7 +340,7 @@ export default function AgentsPage() {
             <span className="hidden sm:inline">Importer Excel</span>
             <span className="sm:hidden">Import</span>
           </Button>
-          {!isViewer && (
+          {canCreateAgent && (
             <Button size="sm" onClick={openCreate} className="w-full sm:w-auto">
               <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
