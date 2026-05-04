@@ -23,8 +23,12 @@ export default function UtilisateursPage() {
   const [createModal, setCreateModal]     = useState(false);
   const [editUser, setEditUser]           = useState<Responsable | null>(null);
   const [deleteUser, setDeleteUser]       = useState<Responsable | null>(null);
+  const [reactivateUser, setReactivateUser] = useState<Responsable | null>(null);
+  const [forceLogoutUser, setForceLogoutUser] = useState<Responsable | null>(null);
   const [resetUser, setResetUser]         = useState<Responsable | null>(null);
   const [newPassword, setNewPassword]     = useState('');
+
+  const [editEmail, setEditEmail] = useState('');
 
   const [form, setForm] = useState({
     agent_id: 0,
@@ -40,6 +44,7 @@ export default function UtilisateursPage() {
   const [agentSearch, setAgentSearch] = useState('');
 
   const [droits, setDroits] = useState<Record<string, boolean>>({});
+  const [editIsViewer, setEditIsViewer] = useState(false);
 
   const { data, isLoading } = useQuery({ queryKey: ['users'], queryFn: usersApi.list, refetchOnWindowFocus: true, staleTime: 0 });
 
@@ -85,6 +90,25 @@ export default function UtilisateursPage() {
     onError: (err: Error) => toast.error('Erreur', err.message),
   });
 
+  const reactivateMut = useMutation({
+    mutationFn: (id: number) => usersApi.updateDroits(id, { actif: true }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['users'] });
+      toast.success('Utilisateur réactivé');
+      setReactivateUser(null);
+    },
+    onError: (err: Error) => toast.error('Erreur', err.message),
+  });
+
+  const forceLogoutMut = useMutation({
+    mutationFn: (id: number) => usersApi.forceLogout(id),
+    onSuccess: (res) => {
+      toast.success('Déconnexion forcée', res.had_active_session ? 'Session active supprimée' : 'Aucune session active');
+      setForceLogoutUser(null);
+    },
+    onError: (err: Error) => toast.error('Erreur', err.message),
+  });
+
   const deleteMut = useMutation({
     mutationFn: (id: number) => usersApi.delete(id),
     onSuccess: () => {
@@ -111,10 +135,16 @@ export default function UtilisateursPage() {
       can_view_historique: u.can_view_historique,
       can_manage_users:    u.can_manage_users,
     });
+    setEditIsViewer(Boolean(u.is_viewer));
+    setEditEmail(String(u.email ?? ''));
     setEditUser(u);
   };
 
   const users = data?.users ?? [];
+
+  const agentById = new Map<number, { id: number; nom: string; prenom: string; telephone: string }>(
+    (agents ?? []).map(a => [a.id, { id: a.id, nom: a.nom, prenom: a.prenom, telephone: a.telephone }])
+  );
 
   return (
     <div className="p-6 max-w-5xl mx-auto space-y-6">
@@ -154,6 +184,7 @@ export default function UtilisateursPage() {
               <thead>
                 <tr className="border-b border-gray-100">
                   <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Utilisateur</th>
+                  <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Agent lié</th>
                   <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Poste</th>
                   <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Droits</th>
                   <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Statut</th>
@@ -182,6 +213,20 @@ export default function UtilisateursPage() {
                             <p className="text-xs text-gray-500">{u.email}</p>
                           </div>
                         </div>
+                      </td>
+                      <td className="px-4 py-3">
+                        {typeof u.agent_id === 'number' ? (() => {
+                          const a = agentById.get(u.agent_id);
+                          if (!a) return <span className="text-xs text-gray-400">#{u.agent_id}</span>;
+                          return (
+                            <div className="text-xs">
+                              <p className="text-gray-900 font-medium">{a.prenom} {a.nom}</p>
+                              <p className="text-gray-500 font-mono">{a.telephone}</p>
+                            </div>
+                          );
+                        })() : (
+                          <span className="text-xs text-gray-400">—</span>
+                        )}
                       </td>
                       <td className="px-4 py-3">
                         {u.role_label ? (
@@ -215,14 +260,25 @@ export default function UtilisateursPage() {
                               className="text-brand-600 hover:text-brand-800 text-xs font-medium px-2 py-1 rounded hover:bg-brand-50">
                               Droits
                             </button>
+                            <button onClick={() => setForceLogoutUser(u)}
+                              className="text-gray-500 hover:text-gray-700 text-xs font-medium px-2 py-1 rounded hover:bg-gray-100">
+                              Déconnecter
+                            </button>
                             <button onClick={() => { setResetUser(u); setNewPassword(''); }}
                               className="text-gray-500 hover:text-gray-700 text-xs font-medium px-2 py-1 rounded hover:bg-gray-100">
                               MDP
                             </button>
-                            <button onClick={() => setDeleteUser(u)}
-                              className="text-red-500 hover:text-red-700 text-xs font-medium px-2 py-1 rounded hover:bg-red-50">
-                              Désactiver
-                            </button>
+                            {u.actif ? (
+                              <button onClick={() => setDeleteUser(u)}
+                                className="text-red-500 hover:text-red-700 text-xs font-medium px-2 py-1 rounded hover:bg-red-50">
+                                Désactiver
+                              </button>
+                            ) : (
+                              <button onClick={() => setReactivateUser(u)}
+                                className="text-green-600 hover:text-green-800 text-xs font-medium px-2 py-1 rounded hover:bg-green-50">
+                                Réactiver
+                              </button>
+                            )}
                           </div>
                         )}
                       </td>
@@ -330,18 +386,67 @@ export default function UtilisateursPage() {
       {/* Modal Droits */}
       <Modal open={editUser !== null} onClose={() => setEditUser(null)} title={`Droits — ${editUser?.prenom} ${editUser?.nom}`}>
         <div className="space-y-3">
+          <div>
+            <label className="block text-xs font-medium text-gray-700 mb-1">Email</label>
+            <input
+              type="email"
+              value={editEmail}
+              onChange={e => setEditEmail(e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
+            />
+          </div>
+
+          <label className="flex items-center gap-3 p-3 rounded-lg border border-gray-200 cursor-pointer hover:bg-gray-50">
+            <input
+              type="checkbox"
+              checked={editIsViewer}
+              onChange={e => setEditIsViewer(e.target.checked)}
+              className="w-4 h-4 text-brand-600 rounded"
+            />
+            <span className="text-sm text-gray-700 font-medium">Compte lecteur (consultation seule)</span>
+          </label>
+
           {Object.entries(DROITS_LABELS).map(([key, label]) => (
             <label key={key} className="flex items-center gap-3 p-3 rounded-lg border border-gray-200 cursor-pointer hover:bg-gray-50">
               <input type="checkbox" checked={droits[key] ?? false}
                 onChange={e => setDroits(d => ({ ...d, [key]: e.target.checked }))}
+                disabled={editIsViewer}
                 className="w-4 h-4 text-brand-600 rounded"/>
               <span className="text-sm text-gray-700 font-medium">{label}</span>
             </label>
           ))}
+
+          {editIsViewer && (
+            <p className="text-xs text-gray-500 bg-gray-50 rounded-lg px-3 py-2">
+              Ce compte est en mode <strong>Lecteur</strong>. Les droits d'action sont désactivés.
+            </p>
+          )}
+
           <div className="flex justify-end gap-3 pt-2">
             <Button variant="secondary" onClick={() => setEditUser(null)}>Annuler</Button>
             <Button loading={updateMut.isPending}
-              onClick={() => editUser && updateMut.mutate({ id: editUser.id, data: droits })}>
+              onClick={() => {
+                if (!editUser) return;
+                const emailChanged = editEmail.trim() && editEmail.trim() !== String(editUser.email ?? '');
+                if (editIsViewer) {
+                  updateMut.mutate({
+                    id: editUser.id,
+                    data: {
+                      ...(emailChanged ? { email: editEmail.trim() } : {}),
+                      is_viewer: true,
+                      can_import_agents: false,
+                      can_launch_campagne: false,
+                      can_view_historique: true,
+                      can_manage_users: false,
+                    },
+                  });
+                  return;
+                }
+                updateMut.mutate({
+                  id: editUser.id,
+                  data: { ...droits, ...(emailChanged ? { email: editEmail.trim() } : {}), is_viewer: false },
+                });
+              }}>
               Enregistrer les droits
             </Button>
           </div>
@@ -379,6 +484,30 @@ export default function UtilisateursPage() {
         confirmLabel="Désactiver"
         loading={deleteMut.isPending}
         message={`Voulez-vous désactiver ${deleteUser?.prenom} ${deleteUser?.nom} (${deleteUser?.email}) ? Il ne pourra plus se connecter.`}
+      />
+
+      {/* Confirm Réactivation */}
+      <ConfirmModal
+        open={reactivateUser !== null}
+        onClose={() => setReactivateUser(null)}
+        onConfirm={() => reactivateUser && reactivateMut.mutate(reactivateUser.id)}
+        title="Réactiver l'utilisateur"
+        confirmVariant="primary"
+        confirmLabel="Réactiver"
+        loading={reactivateMut.isPending}
+        message={`Voulez-vous réactiver ${reactivateUser?.prenom} ${reactivateUser?.nom} (${reactivateUser?.email}) ? Il pourra se reconnecter.`}
+      />
+
+      {/* Confirm Force Logout */}
+      <ConfirmModal
+        open={forceLogoutUser !== null}
+        onClose={() => setForceLogoutUser(null)}
+        onConfirm={() => forceLogoutUser && forceLogoutMut.mutate(forceLogoutUser.id)}
+        title="Déconnecter l'utilisateur"
+        confirmVariant="primary"
+        confirmLabel="Déconnecter"
+        loading={forceLogoutMut.isPending}
+        message={`Voulez-vous forcer la déconnexion de ${forceLogoutUser?.prenom} ${forceLogoutUser?.nom} (${forceLogoutUser?.email}) ?`}
       />
     </div>
   );

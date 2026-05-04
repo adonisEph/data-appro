@@ -64,6 +64,8 @@ export const usersApi = {
     request<{ ok: boolean }>(`/users/${id}`, { method: 'DELETE' }),
   resetPassword: (id: number, new_password: string) =>
     request<{ ok: boolean }>(`/users/${id}/reset-password`, { method: 'POST', body: JSON.stringify({ new_password }) }),
+  forceLogout: (id: number) =>
+    request<{ ok: boolean; had_active_session: boolean }>(`/users/${id}/force-logout`, { method: 'POST' }),
 };
 
 // Campagnes

@@ -899,11 +899,20 @@ usersRouter.put('/:id', async c => {
   if (id === Number(currentUser.sub)) return c.json({ error: 'Impossible de modifier son propre compte ici' }, 400);
 
   const body = await c.req.json<{
+    email?: string;
     can_import_agents?: boolean; can_launch_campagne?: boolean;
     can_view_historique?: boolean; can_manage_users?: boolean;
     actif?: boolean; is_viewer?: boolean;
   }>();
   const updates: string[] = []; const values: unknown[] = [];
+  if (body.email !== undefined) {
+    const email = String(body.email ?? '').trim().toLowerCase();
+    if (!email) return c.json({ error: 'Email invalide' }, 400);
+    const existing = await c.env.DB.prepare(`SELECT id FROM responsables WHERE lower(email) = lower(?) AND id != ? LIMIT 1`).bind(email, id).first<{ id: number }>();
+    if (existing) return c.json({ error: 'Email déjà utilisé' }, 409);
+    updates.push('email = ?');
+    values.push(email);
+  }
   if (body.can_import_agents   !== undefined) { updates.push('can_import_agents = ?');   values.push(body.can_import_agents   ? 1 : 0); }
   if (body.can_launch_campagne !== undefined) { updates.push('can_launch_campagne = ?'); values.push(body.can_launch_campagne ? 1 : 0); }
   if (body.can_view_historique !== undefined) { updates.push('can_view_historique = ?'); values.push(body.can_view_historique ? 1 : 0); }
@@ -914,6 +923,21 @@ usersRouter.put('/:id', async c => {
   values.push(id);
   await c.env.DB.prepare(`UPDATE responsables SET ${updates.join(', ')} WHERE id = ?`).bind(...values).run();
   return c.json({ ok: true });
+});
+
+usersRouter.post('/:id/force-logout', async c => {
+  const id = Number(c.req.param('id'));
+  const currentUser = c.get('user') as JWTPayload;
+  if (id === Number(currentUser.sub)) return c.json({ error: 'Impossible de se déconnecter soi-même ici' }, 400);
+
+  const existed = await c.env.DB.prepare(`SELECT responsable_id FROM active_sessions WHERE responsable_id = ? LIMIT 1`).bind(id).first<{ responsable_id: number }>();
+  await c.env.DB.prepare(`DELETE FROM active_sessions WHERE responsable_id = ?`).bind(id).run();
+
+  await c.env.DB.prepare(`INSERT INTO audit_logs (responsable_id, action, details) VALUES (?, ?, ?)`)
+    .bind(Number(currentUser.sub), 'USER_FORCE_LOGOUT', JSON.stringify({ target_responsable_id: id, had_active_session: Boolean(existed) }))
+    .run();
+
+  return c.json({ ok: true, had_active_session: Boolean(existed) });
 });
 
 usersRouter.delete('/:id', async c => {
