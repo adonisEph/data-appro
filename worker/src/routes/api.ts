@@ -14,13 +14,9 @@ async function fetchTrackedAgentIdSet(db: Env['DB']): Promise<Set<number>> {
   return new Set<number>((results ?? []).map(r => Number(r.agent_id)).filter(n => Number.isFinite(n) && n > 0));
 }
 
-function maskTelephoneForNonSuperAdmin(tel: unknown): unknown {
-  if (typeof tel !== 'string') return tel;
-  const digits = tel.replace(/\D/g, '');
-  if (!digits) return tel;
-  // Masquer tous les chiffres sauf les 2 derniers
-  const maskedDigits = digits.replace(/\d(?=\d{2})/g, '*');
-  return tel.replace(digits, maskedDigits);
+function isTrackedAgentId(trackedSet: Set<number>, agentId: unknown): boolean {
+  const id = typeof agentId === 'number' ? agentId : Number(agentId);
+  return Number.isFinite(id) && trackedSet.has(id);
 }
 
 // ── Santé ────────────────────────────────────────────────────
@@ -197,17 +193,13 @@ agentsRouter.get('/', async c => {
     `SELECT * FROM agents WHERE actif = 1 ORDER BY nom, prenom`
   ).all<Record<string, unknown>>();
 
-  const agents = results ?? [];
-
-  if (!isSuperAdmin) {
-    const trackedSet = await fetchTrackedAgentIdSet(c.env.DB);
-    for (const a of agents) {
-      const aid = Number((a as { id?: number }).id);
-      if (trackedSet.has(aid)) {
-        (a as { telephone?: unknown }).telephone = maskTelephoneForNonSuperAdmin((a as { telephone?: unknown }).telephone);
-      }
-    }
+  const agentsAll = results ?? [];
+  if (isSuperAdmin) {
+    return c.json({ agents: agentsAll, total: agentsAll.length });
   }
+
+  const trackedSet = await fetchTrackedAgentIdSet(c.env.DB);
+  const agents = agentsAll.filter(a => !isTrackedAgentId(trackedSet, (a as { id?: unknown }).id));
   return c.json({ agents, total: agents.length });
 });
 
@@ -229,15 +221,7 @@ agentsRouter.get('/quality-check', async c => {
     updated_at: string;
   }>();
 
-  const agents = allAgents ?? [];
-
-  if (!isSuperAdmin && trackedSet.size > 0) {
-    for (const a of agents) {
-      if (trackedSet.has(a.id)) {
-        a.telephone = String(maskTelephoneForNonSuperAdmin(a.telephone));
-      }
-    }
-  }
+  const agents = (allAgents ?? []).filter(a => isSuperAdmin || !trackedSet.has(a.id));
 
   const normalizePhone = (s: string) => (s ?? '').replace(/\s+/g, '').trim();
   const normalizeName = (s: string) => (s ?? '').trim().toLowerCase();
@@ -646,18 +630,11 @@ auditLogsRouter.get('/', async c => {
   params.push(limit, offset);
 
   const { results } = await c.env.DB.prepare(sql).bind(...params).all();
-  const logs = results ?? [];
+  const logsAll = results ?? [];
+  if (isSuperAdmin) return c.json({ logs: logsAll, limit, offset });
 
-  if (!isSuperAdmin) {
-    const trackedSet = await fetchTrackedAgentIdSet(c.env.DB);
-    for (const l of logs) {
-      const aid = Number((l as { agent_id?: number }).agent_id);
-      if (trackedSet.has(aid)) {
-        (l as { agent_telephone?: unknown }).agent_telephone = maskTelephoneForNonSuperAdmin((l as { agent_telephone?: unknown }).agent_telephone);
-      }
-    }
-  }
-
+  const trackedSet = await fetchTrackedAgentIdSet(c.env.DB);
+  const logs = logsAll.filter(l => !isTrackedAgentId(trackedSet, (l as { agent_id?: unknown }).agent_id));
   return c.json({ logs, limit, offset });
 });
 
@@ -1051,6 +1028,7 @@ campagnesRouter.get('/', async c => {
 campagnesRouter.get('/:id/eligible-agents', async c => {
   const user = c.get('user') as JWTPayload;
   const isSuperAdmin = Boolean(user?.is_super_admin);
+  const trackedSet = !isSuperAdmin ? await fetchTrackedAgentIdSet(c.env.DB) : new Set<number>();
   const id = Number(c.req.param('id'));
   const campagne = await c.env.DB.prepare(`SELECT lance_le, created_at FROM campagnes WHERE id = ?`).bind(id).first<{ lance_le: string | null; created_at: string }>();
   if (!campagne) return c.json({ error: 'Campagne introuvable' }, 404);
@@ -1080,7 +1058,10 @@ campagnesRouter.get('/:id/eligible-agents', async c => {
      ORDER BY nom, prenom`
   ).bind(cutoff).all();
 
-  const agents = results ?? [];
+  const agentsAll = results ?? [];
+  const agents = isSuperAdmin
+    ? agentsAll
+    : agentsAll.filter(a => !isTrackedAgentId(trackedSet, (a as { id?: unknown }).id));
 
   return c.json({
     agents,
@@ -1225,16 +1206,10 @@ campagnesRouter.get('/:id', async c => {
      ORDER BY t.id DESC`
   ).bind(id, isSuperAdmin ? 1 : 0).all<Record<string, unknown>>();
 
-  const transactions = transactionsRaw ?? [];
-
-  if (!isSuperAdmin && trackedSet.size > 0) {
-    for (const tx of transactions) {
-      const aid = Number((tx as { agent_id?: number }).agent_id);
-      if (trackedSet.has(aid)) {
-        (tx as { telephone?: unknown }).telephone = maskTelephoneForNonSuperAdmin((tx as { telephone?: unknown }).telephone);
-      }
-    }
-  }
+  const transactionsAll = transactionsRaw ?? [];
+  const transactions = isSuperAdmin
+    ? transactionsAll
+    : transactionsAll.filter(tx => !isTrackedAgentId(trackedSet, (tx as { agent_id?: unknown }).agent_id));
 
   const metrics = await c.env.DB.prepare(
     `SELECT
@@ -1458,15 +1433,10 @@ historiqueRouter.get('/transactions', async c => {
   }
   query += ' ORDER BY t.id DESC LIMIT 500';
   const { results } = await c.env.DB.prepare(query).bind(...params).all();
-  const transactions = results ?? [];
-  if (!isSuperAdmin && trackedSet.size > 0) {
-    for (const tx of transactions) {
-      const aid = Number((tx as { agent_id?: number }).agent_id);
-      if (trackedSet.has(aid)) {
-        (tx as { telephone?: unknown }).telephone = maskTelephoneForNonSuperAdmin((tx as { telephone?: unknown }).telephone);
-      }
-    }
-  }
+  const transactionsAll = results ?? [];
+  const transactions = isSuperAdmin
+    ? transactionsAll
+    : transactionsAll.filter(tx => !isTrackedAgentId(trackedSet, (tx as { agent_id?: unknown }).agent_id));
   return c.json({ transactions, total: transactions.length });
 });
 
@@ -1481,19 +1451,15 @@ historiqueRouter.get('/transactions/:id/preuve', async c => {
   ).bind(id).first();
   if (!tx) return c.json({ error: 'Transaction introuvable' }, 404);
 
+  if (!isSuperAdmin && isTrackedAgentId(trackedSet, (tx as { agent_id?: unknown }).agent_id)) {
+    return c.json({ error: 'Transaction introuvable' }, 404);
+  }
+
   if (!isSuperAdmin) {
     const statut = (tx as { statut?: string | null }).statut;
     const airtelMessage = (tx as { airtel_message?: string | null }).airtel_message;
     if (statut === 'confirme' && airtelMessage === 'Confirmé (agent supprimé)') {
       return c.json({ error: 'Transaction introuvable' }, 404);
-    }
-  }
-
-  if (!isSuperAdmin && tx && trackedSet.size > 0) {
-    const aid = Number((tx as { agent_id?: number }).agent_id);
-    if (trackedSet.has(aid)) {
-      (tx as { telephone?: unknown }).telephone = maskTelephoneForNonSuperAdmin((tx as { telephone?: unknown }).telephone);
-      (tx as { agent_tel?: unknown }).agent_tel = maskTelephoneForNonSuperAdmin((tx as { agent_tel?: unknown }).agent_tel);
     }
   }
 
@@ -1540,24 +1506,14 @@ relanceRouter.get('/campagnes/:id/export.csv', async c => {
   const campagne = await c.env.DB.prepare(`SELECT mois FROM campagnes WHERE id = ?`).bind(id).first<{ mois: string }>();
   if (!campagne) return c.json({ error: 'Campagne introuvable' }, 404);
   const { results } = await c.env.DB.prepare(
-    `SELECT a.nom, a.prenom, a.telephone, a.role, a.role_label, t.option_used, t.statut,
+    `SELECT a.id as agent_id, a.nom, a.prenom, a.telephone, a.role, a.role_label, t.option_used, t.statut,
             t.airtel_transaction_id, t.airtel_reference, t.airtel_message, t.montant_fcfa, t.tente_le, t.confirme_le, t.nb_tentatives
      FROM transactions t JOIN agents a ON a.id = t.agent_id WHERE t.campagne_id = ? ORDER BY a.nom, a.prenom`
   ).bind(id).all<Record<string, string | number | null>>();
-  const rowsRaw = results ?? [];
-  if (!isSuperAdmin && trackedSet.size > 0) {
-    for (const r of rowsRaw) {
-      const tel = r['telephone'];
-      if (typeof tel === 'string') {
-        // Ici on n'a pas l'agent_id, donc on masque si le téléphone appartient à un agent suivi.
-        // On tente de retrouver l'agent_id via une requête légère.
-        const agent = await c.env.DB.prepare(`SELECT id FROM agents WHERE telephone = ?`).bind(tel).first<{ id: number }>();
-        if (agent && trackedSet.has(Number(agent.id))) {
-          r['telephone'] = String(maskTelephoneForNonSuperAdmin(tel));
-        }
-      }
-    }
-  }
+  const rowsAll = results ?? [];
+  const rowsRaw = isSuperAdmin
+    ? rowsAll
+    : rowsAll.filter(r => !isTrackedAgentId(trackedSet, r['agent_id']));
   const headers = ['Nom','Prénom','Téléphone','Rôle technique','Poste','Option','Statut','ID Airtel','Référence','Message','Montant FCFA','Date tentative','Date confirmation','Nb tentatives'];
   const rows = rowsRaw.map(r =>
     [r['nom'],r['prenom'],r['telephone'],r['role'],r['role_label']??'',r['option_used'],r['statut'],
