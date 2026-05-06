@@ -7,6 +7,7 @@ export interface Env {
   AIRTEL_COUNTRY_CODE: string;
   AIRTEL_CURRENCY: string;
   JWT_SECRET: string;
+  SMS_WEBHOOK_SECRET: string;
   ENVIRONMENT: string;
 }
 

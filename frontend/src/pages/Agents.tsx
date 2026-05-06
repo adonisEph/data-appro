@@ -279,7 +279,7 @@ export default function AgentsPage() {
         <div>
           <h1 className="text-xl md:text-2xl font-bold text-gray-900">Agents</h1>
           <div className="flex items-center gap-3 mt-0.5">
-            <p className="text-sm text-gray-500">{filtered.length} agents affichés</p>
+            {/*<p className="text-sm text-gray-500">{filtered.length} agents affichés</p>*/}
             <p className="text-sm text-gray-500">{totalActive} agents actifs</p>
             {lastUpdated && (
               <span className="text-xs text-gray-400 flex items-center gap-1">

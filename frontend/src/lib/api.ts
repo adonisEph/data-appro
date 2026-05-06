@@ -114,6 +114,22 @@ export const historiqueApi = {
     request<{ preuve: Transaction & { mois: string; budget_fcfa: number } }>(`/historique/transactions/${txId}/preuve`),
 };
 
+// SMS (Android webhook inbox)
+export const smsApi = {
+  suggestions: (params: { telephone: string; action?: 'argent' | 'forfait'; montant_fcfa?: number; since_minutes?: number; limit?: number }) => {
+    const qs = new URLSearchParams(
+      Object.fromEntries(
+        Object.entries(params)
+          .filter(([, v]) => v !== undefined && v !== null && v !== '')
+          .map(([k, v]) => [k, String(v)])
+      )
+    ).toString();
+    return request<{ suggestions: Array<{ id: number; sender: string | null; body: string; received_at: string | null; device_id: string | null; created_at: string }> }>(
+      `/sms/suggestions${qs ? '?' + qs : ''}`
+    );
+  },
+};
+
 // Events (audit logs)
 export const eventsApi = {
   list: (params: { since_id?: number; limit?: number }) => {

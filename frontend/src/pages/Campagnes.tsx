@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Link, useParams, useNavigate } from 'react-router-dom';
-import { agentsApi, campagnesApi, trackedAgentsApi } from '../lib/api';
+import { agentsApi, campagnesApi, trackedAgentsApi, smsApi } from '../lib/api';
 import { useToast } from '../components/ui/Toast';
 import { LiveBanner } from '../components/ui/LiveBanner';
 import { ConfirmModal } from '../components/ui/ConfirmModal';
@@ -193,6 +193,10 @@ export function CampagneDetailPage() {
   const [search, setSearch] = useState('');
   const [confirmLancer, setConfirmLancer] = useState(false);
   const [confirmRelancer, setConfirmRelancer] = useState(false);
+
+  const [smsSuggestionsOpen, setSmsSuggestionsOpen] = useState(false);
+  const [smsSuggestions, setSmsSuggestions] = useState<Array<{ id: number; sender: string | null; body: string; received_at: string | null; device_id: string | null; created_at: string }>>([]);
+  const [smsSelectedId, setSmsSelectedId] = useState<number | null>(null);
   const [todoOnly, setTodoOnly] = useState(true);
   const [manualSort, setManualSort] = useState<'quota' | 'montant'>('montant');
   const [manualSortDir, setManualSortDir] = useState<'asc' | 'desc'>('desc');
@@ -205,6 +209,24 @@ export function CampagneDetailPage() {
     sms: string;
     montant_fcfa?: number;
   }>(null);
+
+  const smsSuggestMut = useMutation({
+    mutationFn: (payload: { telephone: string; action: 'argent' | 'forfait'; montant_fcfa?: number }) =>
+      smsApi.suggestions({
+        telephone: payload.telephone,
+        action: payload.action,
+        montant_fcfa: payload.action === 'argent' ? payload.montant_fcfa : undefined,
+        since_minutes: 60 * 24 * 7,
+        limit: 5,
+      }),
+    onSuccess: (res) => {
+      const list = res?.suggestions ?? [];
+      setSmsSuggestions(list);
+      setSmsSelectedId(list.length === 1 ? list[0].id : null);
+      setSmsSuggestionsOpen(true);
+    },
+    onError: (err: Error) => toast.error('Erreur SMS', err.message),
+  });
 
   const { campagne, transactions, isLive, confirmes, echecs, enAttente, isLoading } = useProvisionProgress(Number(id));
 
@@ -734,6 +756,23 @@ export function CampagneDetailPage() {
 
             <div>
               <label className="block text-xs font-medium text-gray-700 mb-1">SMS complet (preuve) *</label>
+              <div className="flex items-center justify-between gap-3 mb-2">
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  loading={smsSuggestMut.isPending}
+                  onClick={() => {
+                    smsSuggestMut.mutate({
+                      telephone: manualModal.telephone,
+                      action: manualModal.action,
+                      montant_fcfa: manualModal.montant_fcfa ?? undefined,
+                    });
+                  }}
+                >
+                  Récupérer SMS Airtel
+                </Button>
+                <span className="text-xs text-gray-400">Préremplissage auto depuis le téléphone</span>
+              </div>
               <textarea
                 value={manualModal.sms}
                 onChange={e => setManualModal(m => m ? ({ ...m, sms: e.target.value }) : m)}
@@ -742,6 +781,54 @@ export function CampagneDetailPage() {
                 placeholder="Colle ici le SMS complet de confirmation Airtel Money"
               />
             </div>
+
+            <Modal
+              open={smsSuggestionsOpen}
+              onClose={() => { setSmsSuggestionsOpen(false); setSmsSuggestions([]); setSmsSelectedId(null); }}
+              title="Sélectionner un SMS Airtel"
+            >
+              <div className="space-y-3">
+                {smsSuggestions.length === 0 ? (
+                  <p className="text-sm text-gray-600">Aucun SMS trouvé pour ce numéro (sur les 7 derniers jours).</p>
+                ) : (
+                  <>
+                    <p className="text-xs text-gray-500">Choisis le SMS à coller dans la preuve.</p>
+                    <select
+                      value={smsSelectedId ?? ''}
+                      onChange={e => setSmsSelectedId(e.target.value ? Number(e.target.value) : null)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
+                    >
+                      <option value="">— Sélectionner —</option>
+                      {smsSuggestions.map(s => (
+                        <option key={s.id} value={s.id}>
+                          {`${s.sender ?? 'SMS'} — ${new Date(s.created_at).toLocaleString('fr-FR')}`}
+                        </option>
+                      ))}
+                    </select>
+                    <div className="bg-gray-50 border border-gray-200 rounded-xl p-3 text-xs text-gray-700 whitespace-pre-wrap">
+                      {smsSuggestions.find(s => s.id === smsSelectedId)?.body ?? '—'}
+                    </div>
+                    <div className="flex justify-end gap-3">
+                      <Button variant="secondary" onClick={() => { setSmsSuggestionsOpen(false); }}>
+                        Fermer
+                      </Button>
+                      <Button
+                        disabled={!smsSelectedId}
+                        onClick={() => {
+                          const picked = smsSuggestions.find(s => s.id === smsSelectedId);
+                          if (picked) {
+                            setManualModal(m => m ? ({ ...m, sms: picked.body }) : m);
+                            setSmsSuggestionsOpen(false);
+                          }
+                        }}
+                      >
+                        Utiliser ce SMS
+                      </Button>
+                    </div>
+                  </>
+                )}
+              </div>
+            </Modal>
 
             <div className="flex justify-end gap-3">
               <Button variant="secondary" onClick={() => setManualModal(null)}>Annuler</Button>

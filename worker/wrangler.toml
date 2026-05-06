@@ -24,6 +24,7 @@ AIRTEL_CURRENCY     = "XAF"
 # AIRTEL_PIN            → ton PIN Airtel Money EN CLAIR (ex: "1234")
 #                         Le chiffrement RSA est automatique dans le code
 # JWT_SECRET            → openssl rand -base64 40
+# SMS_WEBHOOK_SECRET    → secret partagé pour sécuriser le webhook SMS (Android)
 #
 # x-signature et x-key sont calculés automatiquement à chaque requête
 # en utilisant la clé publique RSA Airtel embarquée dans services/airtel.ts

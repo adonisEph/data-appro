@@ -23,6 +23,141 @@ function isTrackedAgentId(trackedSet: Set<number>, agentId: unknown): boolean {
 api.get('/health', c => c.json({ ok: true, service: 'data-appro-worker', ts: new Date().toISOString() }));
 
 // ══════════════════════════════════════════════════════════
+// SMS INBOUND (Android Webhook)
+// ══════════════════════════════════════════════════════════
+const smsRouter = new Hono<AppEnv>();
+
+function getInboundSmsSecret(c: { req: { header: (name: string) => string | undefined; query: (name: string) => string | undefined } }): string | null {
+  const header = c.req.header('X-Webhook-Secret') ?? c.req.header('x-webhook-secret') ?? null;
+  if (header) return header;
+  const q = c.req.query('token');
+  return q ? String(q) : null;
+}
+
+smsRouter.post('/inbound', async c => {
+  const provided = getInboundSmsSecret(c);
+  if (!provided || provided !== c.env.SMS_WEBHOOK_SECRET) {
+    return c.json({ error: 'Unauthorized' }, 401);
+  }
+
+  const contentType = (c.req.header('Content-Type') ?? '').toLowerCase();
+
+  let payload: unknown = null;
+  try {
+    if (contentType.includes('application/json')) {
+      payload = await c.req.json();
+    } else {
+      payload = await c.req.parseBody();
+    }
+  } catch {
+    payload = null;
+  }
+
+  const p = (payload ?? {}) as Record<string, unknown>;
+  const body =
+    (typeof p.body === 'string' ? p.body : null)
+    ?? (typeof p.msg === 'string' ? p.msg : null)
+    ?? (typeof p.message === 'string' ? p.message : null)
+    ?? (typeof p.key === 'string' ? p.key : null)
+    ?? '';
+
+  if (!body.trim()) {
+    return c.json({ error: 'body requis' }, 400);
+  }
+
+  const sender =
+    (typeof p.sender === 'string' ? p.sender : null)
+    ?? (typeof p.from === 'string' ? p.from : null)
+    ?? (typeof p.address === 'string' ? p.address : null)
+    ?? null;
+
+  const receivedAt =
+    (typeof p.received_at === 'string' ? p.received_at : null)
+    ?? (typeof p.time === 'string' ? p.time : null)
+    ?? null;
+
+  const deviceId = typeof p.device_id === 'string' ? p.device_id : null;
+
+  await c.env.DB.prepare(
+    `INSERT INTO sms_inbox (sender, body, received_at, device_id, raw_payload)
+     VALUES (?, ?, ?, ?, ?)`
+  ).bind(
+    sender,
+    body,
+    receivedAt,
+    deviceId,
+    JSON.stringify(payload ?? {})
+  ).run();
+
+  return c.json({ ok: true });
+});
+
+smsRouter.get('/suggestions', authMiddleware, async c => {
+  const q = c.req.query();
+  const telephone = q.telephone ? String(q.telephone) : '';
+  const normalizedTel = telephone.replace(/\D/g, '').trim();
+  if (!normalizedTel) return c.json({ error: 'telephone requis' }, 400);
+
+  const limit = Math.min(20, Math.max(1, q.limit ? Number(q.limit) : 5));
+  const sinceMinutes = Math.min(60 * 24 * 14, Math.max(5, q.since_minutes ? Number(q.since_minutes) : 60 * 24 * 3));
+  const qAmount = q.montant_fcfa !== undefined && q.montant_fcfa !== '' ? Number(q.montant_fcfa) : null;
+  const action = q.action ? String(q.action) : null; // 'argent' | 'forfait'
+
+  const likeTel = `%${normalizedTel}%`;
+  const { results } = await c.env.DB.prepare(
+    `SELECT id, sender, body, received_at, device_id, created_at
+     FROM sms_inbox
+     WHERE datetime(created_at) >= datetime('now', ?)
+       AND (body LIKE ?)
+     ORDER BY id DESC
+     LIMIT ?`
+  ).bind(`-${sinceMinutes} minutes`, likeTel, limit * 5).all<{
+    id: number;
+    sender: string | null;
+    body: string;
+    received_at: string | null;
+    device_id: string | null;
+    created_at: string;
+  }>();
+
+  const rows = (results ?? []).map(r => {
+    const txt = (r.body ?? '').toString();
+    const hasRef = /\b(ref|trans\.?id)\b/i.test(txt);
+    const hasAmount = qAmount !== null
+      ? new RegExp(`\\b${String(qAmount).replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&')}\\b`).test(txt)
+      : false;
+    const looksLikeForfait = /\bactivation\b|\bdatabundle\b|\bgb\b/i.test(txt);
+    const looksLikeArgent = /\bVous avez (recu|reçu)\b|\bVous avez envoye\b|\bVous avez envoyé\b|\bCFA\b/i.test(txt);
+
+    let score = 0;
+    if (hasRef) score += 3;
+    if (hasAmount) score += 2;
+    if (action === 'forfait' && looksLikeForfait) score += 2;
+    if (action === 'argent' && looksLikeArgent) score += 2;
+    score += txt.includes(normalizedTel) ? 2 : 0;
+
+    return { ...r, score };
+  });
+
+  const suggestions = rows
+    .filter(r => r.body && r.body.toString().trim().length > 0)
+    .sort((a, b) => b.score - a.score || b.id - a.id)
+    .slice(0, limit)
+    .map(r => ({
+      id: r.id,
+      sender: r.sender,
+      body: r.body,
+      received_at: r.received_at,
+      device_id: r.device_id,
+      created_at: r.created_at,
+    }));
+
+  return c.json({ suggestions });
+});
+
+api.route('/sms', smsRouter);
+
+// ══════════════════════════════════════════════════════════
 // AUTH
 // ══════════════════════════════════════════════════════════
 api.post('/auth/login', async c => {
