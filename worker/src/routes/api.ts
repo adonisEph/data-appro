@@ -1228,29 +1228,55 @@ campagnesRouter.get('/:id/eligible-agents', async c => {
 
 campagnesRouter.post('/', noViewerMiddleware, requireCanLaunchCampagne, async c => {
   const user = c.get('user');
-  const { mois, budget_fcfa, compte_source, option_envoi, mode } = await c.req.json<{
-    mois: string; budget_fcfa: number; compte_source: string; option_envoi: string; mode?: string;
-  }>();
-  if (!mois || !budget_fcfa || !compte_source) return c.json({ error: 'mois, budget_fcfa, compte_source requis' }, 400);
-  const result = await c.env.DB.prepare(
-    `INSERT INTO campagnes (mois, budget_fcfa, compte_source, responsable_id, option_envoi)
-     VALUES (?, ?, ?, ?, ?) RETURNING id`
-  ).bind(mois, budget_fcfa, compte_source, Number(user.sub), option_envoi ?? 'argent').first<{ id: number }>();
+  let body: { mois?: string; budget_fcfa?: number; compte_source?: string; option_envoi?: string; mode?: string } = {};
+  try {
+    body = await c.req.json();
+  } catch {
+    return c.json({ error: 'Corps de la requête invalide (JSON attendu)' }, 400);
+  }
 
-  if (mode === 'manuel' && result?.id) {
+  const { mois, budget_fcfa, compte_source, option_envoi, mode } = body;
+  if (!mois || !budget_fcfa || !compte_source) return c.json({ error: 'mois, budget_fcfa, compte_source requis' }, 400);
+
+  // Vérifier si une campagne existe déjà pour ce mois
+  const existing = await c.env.DB.prepare(
+    `SELECT id FROM campagnes WHERE mois = ? LIMIT 1`
+  ).bind(mois).first<{ id: number }>();
+  if (existing) {
+    return c.json({ error: `Une campagne existe déjà pour le mois ${mois}. Supprimez-la d'abord ou choisissez un autre mois.` }, 409);
+  }
+
+  let result: { id: number } | null = null;
+  try {
+    result = await c.env.DB.prepare(
+      `INSERT INTO campagnes (mois, budget_fcfa, compte_source, responsable_id, option_envoi)
+       VALUES (?, ?, ?, ?, ?) RETURNING id`
+    ).bind(mois, budget_fcfa, compte_source, Number(user.sub), option_envoi ?? 'argent').first<{ id: number }>();
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error('[Campagne Create Error]', msg);
+    if (msg.toLowerCase().includes('unique') || msg.toLowerCase().includes('constraint')) {
+      return c.json({ error: `Une campagne existe déjà pour le mois ${mois}.` }, 409);
+    }
+    return c.json({ error: 'Erreur lors de la création de la campagne', detail: msg }, 500);
+  }
+
+  if (!result?.id) {
+    return c.json({ error: 'Erreur inattendue : campagne non créée' }, 500);
+  }
+
+  if (mode === 'manuel' && result.id) {
     await c.env.DB.prepare(`UPDATE campagnes SET mode = 'manuel' WHERE id = ?`).bind(result.id).run();
   }
 
-  if (result?.id) {
-    await c.env.DB.prepare(`INSERT INTO audit_logs (campagne_id, responsable_id, action, details) VALUES (?, ?, ?, ?)`).bind(
-      result.id,
-      Number(user.sub),
-      'CAMPAGNE_CREATED',
-      JSON.stringify({ mois, budget_fcfa, compte_source, option_envoi: option_envoi ?? 'argent', mode: mode ?? 'auto' })
-    ).run();
-  }
+  await c.env.DB.prepare(`INSERT INTO audit_logs (campagne_id, responsable_id, action, details) VALUES (?, ?, ?, ?)`).bind(
+    result.id,
+    Number(user.sub),
+    'CAMPAGNE_CREATED',
+    JSON.stringify({ mois, budget_fcfa, compte_source, option_envoi: option_envoi ?? 'argent', mode: mode ?? 'auto' })
+  ).run();
 
-  return c.json({ ok: true, campagne_id: result?.id });
+  return c.json({ ok: true, campagne_id: result.id });
 });
 
 campagnesRouter.get('/:id', async c => {
