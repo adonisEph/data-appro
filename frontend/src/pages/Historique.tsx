@@ -61,95 +61,131 @@ export default function HistoriquePage() {
   };
 
   const handlePrint = () => {
+    // ── Obligation de sélectionner une campagne (mois) ────────────────────
+    if (!applied.mois) {
+      alert('Veuillez sélectionner une Campagne (mois) avant d\'imprimer.\n\nL\'impression est associée à une campagne spécifique.');
+      return;
+    }
     if (txList.length === 0) return;
 
-    // ── Filtres appliqués ──────────────────────────────────────────────────
+    // ── Calcul des totaux ─────────────────────────────────────────────────
+    const nbConfirme  = txList.filter(tx => tx.statut === 'confirme').length;
+    const nbEchec     = txList.filter(tx => tx.statut === 'echec').length;
+    const nbAttente   = txList.filter(tx => tx.statut !== 'confirme' && tx.statut !== 'echec').length;
+    // montant_fcfa peut être null (transactions non-argent) ou 0 — on ne prend que les positifs confirmés
+    const totalMontant = txList
+      .filter(tx => tx.statut === 'confirme' && tx.montant_fcfa != null && (tx.montant_fcfa as number) > 0)
+      .reduce((sum, tx) => sum + (tx.montant_fcfa as number), 0);
+
+    // ── Filtres résumé ────────────────────────────────────────────────────
     const filtersParts: string[] = [];
     if (applied.telephone) filtersParts.push(`<span><strong>Téléphone :</strong> ${fmtTelephone(applied.telephone)}</span>`);
     if (applied.statut)    filtersParts.push(`<span><strong>Statut :</strong> ${applied.statut}</span>`);
-    if (applied.mois)      filtersParts.push(`<span><strong>Campagne :</strong> ${fmtMois(applied.mois)}</span>`);
-    if (!filtersParts.length) filtersParts.push('<span><strong>Filtres :</strong> Aucun (liste complète)</span>');
-    filtersParts.push(`<span style="margin-left:auto"><strong>Total transactions :</strong> ${txList.length}</span>`);
+    filtersParts.push(`<span><strong>Campagne :</strong> ${fmtMois(applied.mois)}</span>`);
+    filtersParts.push(`<span style="margin-left:auto"><strong>Total :</strong> ${txList.length} transaction${txList.length > 1 ? 's' : ''}</span>`);
 
-    // ── Lignes du tableau ──────────────────────────────────────────────────
-    const rows = txList.map(tx => {
+    // ── Lignes du tableau ─────────────────────────────────────────────────
+    const rows = txList.map((tx, idx) => {
       const nom      = `${tx.prenom ?? ''} ${tx.nom ?? ''}`.trim();
-      const tel      = fmtTelephone(tx.telephone);
-      const role     = tx.role_label ?? tx.role ?? '—';
-      const campagne = tx.mois ? fmtMois(tx.mois) : `#${tx.campagne_id}`;
-      const montant  = tx.montant_fcfa ? tx.montant_fcfa.toLocaleString('fr-FR') + ' F' : '—';
-      const date     = fmtDateTime(tx.tente_le);
+      const tel      = fmtTelephone(tx.telephone as string);
+      const role     = (tx.role_label ?? tx.role ?? '—') as string;
+      // Correction : montant_fcfa peut être null (pas d'argent) ou un nombre (y compris 0)
+      const montantRaw = tx.montant_fcfa as number | null | undefined;
+      const montant  = montantRaw != null && montantRaw > 0
+        ? montantRaw.toLocaleString('fr-FR') + ' F'
+        : '—';
+      const date     = fmtDateTime(tx.tente_le as string);
+      const bg       = idx % 2 === 1 ? 'background:#f9fafb' : '';
 
-      let statutLabel = tx.statut;
+      let statutLabel = tx.statut as string;
       let statutClass = 'attente';
       if (tx.statut === 'confirme') { statutLabel = 'Confirmé'; statutClass = 'confirme'; }
       else if (tx.statut === 'echec') { statutLabel = 'Échec'; statutClass = 'echec'; }
 
       return [
-        `<tr>`,
-        `  <td style="font-weight:500">${nom}</td>`,
-        `  <td style="font-family:monospace">${tel}</td>`,
-        `  <td>${role}</td>`,
-        `  <td>${campagne}</td>`,
-        `  <td><span class="statut-badge ${statutClass}">${statutLabel}</span></td>`,
-        `  <td style="font-weight:600;text-align:right">${montant}</td>`,
-        `  <td style="font-size:10px">${date}</td>`,
+        `<tr style="${bg}">`,
+        `  <td style="font-weight:500;padding:7px 10px;border-bottom:1px solid #e5e7eb;font-size:11px">${nom}</td>`,
+        `  <td style="font-family:monospace;padding:7px 10px;border-bottom:1px solid #e5e7eb;font-size:11px">${tel}</td>`,
+        `  <td style="padding:7px 10px;border-bottom:1px solid #e5e7eb;font-size:11px">${role}</td>`,
+        `  <td style="padding:7px 10px;border-bottom:1px solid #e5e7eb;font-size:11px"><span class="statut-badge ${statutClass}">${statutLabel}</span></td>`,
+        `  <td style="font-weight:600;text-align:right;padding:7px 10px;border-bottom:1px solid #e5e7eb;font-size:11px">${montant}</td>`,
+        `  <td style="font-size:10px;padding:7px 10px;border-bottom:1px solid #e5e7eb;color:#6b7280">${date}</td>`,
         `</tr>`,
       ].join('');
     }).join('');
+
+    // ── Ligne de totaux ───────────────────────────────────────────────────
+    const totalRow = [
+      '<tr style="background:#1e3a5f">',
+      `  <td colspan="3" style="padding:10px;font-weight:700;font-size:11px;color:#fff;border-top:2px solid #1e3a5f">`,
+      `    TOTAUX CAMPAGNE — ${fmtMois(applied.mois)}`,
+      `  </td>`,
+      `  <td style="padding:10px;font-size:10px;color:#fff;border-top:2px solid #1e3a5f">`,
+      `    <span style="display:block">✓ Confirmés : <strong>${nbConfirme}</strong></span>`,
+      `    <span style="display:block">✗ Échecs : <strong>${nbEchec}</strong></span>`,
+      nbAttente > 0 ? `    <span style="display:block">⏳ En attente : <strong>${nbAttente}</strong></span>` : '',
+      `  </td>`,
+      `  <td style="padding:10px;font-weight:700;font-size:13px;text-align:right;color:#4ade80;border-top:2px solid #1e3a5f">`,
+      totalMontant > 0 ? totalMontant.toLocaleString('fr-FR') + ' F' : '—',
+      `  </td>`,
+      `  <td style="padding:10px;font-size:10px;color:#93c5fd;border-top:2px solid #1e3a5f">`,
+      `    ${txList.length} transaction${txList.length > 1 ? 's' : ''}`,
+      `  </td>`,
+      '</tr>',
+    ].join('');
 
     const now = new Date();
     const printHTML = [
       '<!DOCTYPE html><html><head>',
       '<meta charset="UTF-8">',
-      '<title>Rapport Audit – Historique des Approvisionnements</title>',
+      `<title>Rapport Campagne ${fmtMois(applied.mois)} – Data Appro</title>`,
       '<style>',
       'body{font-family:ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;color:#111827;background:#fff;margin:0;padding:20px}',
-      '.header{display:flex;justify-content:space-between;align-items:center;border-bottom:2px solid #111827;padding-bottom:12px;margin-bottom:20px}',
-      '.title{font-size:18px;font-weight:bold;text-transform:uppercase;letter-spacing:.05em}',
+      '.header{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid #111827;padding-bottom:12px;margin-bottom:16px}',
+      '.title{font-size:16px;font-weight:bold;text-transform:uppercase;letter-spacing:.05em}',
+      '.campagne-badge{display:inline-block;margin-top:6px;background:#1e3a5f;color:#fff;font-size:11px;font-weight:700;padding:3px 10px;border-radius:4px;letter-spacing:.03em}',
       '.subtitle{font-size:11px;color:#6b7280;margin-top:4px}',
-      '.meta{font-size:10px;color:#4b5563;text-align:right;line-height:1.4}',
-      '.filters-summary{background:#f9fafb;border:1px solid #e5e7eb;border-radius:6px;padding:10px 14px;margin-bottom:20px;font-size:11px;display:flex;gap:24px;flex-wrap:wrap}',
-      'table{width:100%;border-collapse:collapse;margin-top:10px}',
-      'th{background:#f3f4f6;color:#374151;font-weight:600;text-transform:uppercase;font-size:9px;padding:8px 10px;border-bottom:2px solid #d1d5db;text-align:left}',
-      'td{padding:8px 10px;border-bottom:1px solid #e5e7eb;font-size:11px}',
-      'tr:nth-child(even) td{background:#f9fafb}',
+      '.meta{font-size:10px;color:#4b5563;text-align:right;line-height:1.6}',
+      '.filters-summary{background:#f9fafb;border:1px solid #e5e7eb;border-radius:6px;padding:8px 14px;margin-bottom:16px;font-size:11px;display:flex;gap:20px;flex-wrap:wrap;align-items:center}',
+      'table{width:100%;border-collapse:collapse}',
+      'th{background:#1e3a5f;color:#fff;font-weight:600;text-transform:uppercase;font-size:9px;padding:9px 10px;text-align:left}',
+      '.footer{margin-top:24px;padding-top:8px;border-top:1px solid #e5e7eb;display:flex;justify-content:space-between;font-size:9px;color:#6b7280}',
       '.statut-badge{display:inline-block;padding:2px 6px;border-radius:4px;font-size:9px;font-weight:600;text-transform:uppercase}',
       '.statut-badge.confirme{background:#d1fae5;color:#065f46}',
       '.statut-badge.echec{background:#fee2e2;color:#991b1b}',
       '.statut-badge.attente{background:#f3f4f6;color:#374151}',
-      '.footer{margin-top:30px;padding-top:10px;border-top:1px solid #e5e7eb;display:flex;justify-content:space-between;font-size:9px;color:#6b7280}',
-      '@media print{@page{size:A4 portrait;margin:15mm}body{padding:0}}',
+      '@media print{@page{size:A4 portrait;margin:12mm}body{padding:0}}',
       '</style></head><body>',
       // En-tête
       '<div class="header">',
       '  <div>',
-      '    <div class="title">Rapport d\'Audit – Historique des Approvisionnements</div>',
+      '    <div class="title">Rapport d\'Audit – Approvisionnements</div>',
+      `    <div class="campagne-badge">CAMPAGNE : ${fmtMois(applied.mois).toUpperCase()}</div>`,
       '    <div class="subtitle">Système Data Appro – Airtel Congo CG</div>',
       '  </div>',
       '  <div class="meta">',
       `    <p><strong>Généré le :</strong> ${now.toLocaleDateString('fr-FR')} à ${now.toLocaleTimeString('fr-FR')}</p>`,
-      `    <p><strong>Opérateur :</strong> ${user?.prenom ?? ''} ${user?.nom ?? ''} (${user?.email ?? ''})</p>`,
+      `    <p><strong>Opérateur :</strong> ${user?.prenom ?? ''} ${user?.nom ?? ''}</p>`,
+      `    <p><strong>Email :</strong> ${user?.email ?? ''}</p>`,
       '  </div>',
       '</div>',
       // Filtres
       '<div class="filters-summary">' + filtersParts.join('') + '</div>',
-      // Tableau
+      // Tableau (sans colonne Campagne puisqu'on est filtré sur 1 campagne)
       '<table><thead><tr>',
-      '<th style="width:22%">Agent</th>',
-      '<th style="width:18%">Téléphone</th>',
-      '<th style="width:14%">Rôle</th>',
-      '<th style="width:14%">Campagne</th>',
-      '<th style="width:10%">Statut</th>',
-      '<th style="width:12%;text-align:right">Montant</th>',
-      '<th style="width:18%">Date</th>',
+      '<th style="width:24%">Agent</th>',
+      '<th style="width:20%">Téléphone</th>',
+      '<th style="width:16%">Rôle</th>',
+      '<th style="width:12%">Statut</th>',
+      '<th style="width:14%;text-align:right">Montant</th>',
+      '<th style="width:14%">Date</th>',
       '</tr></thead>',
-      '<tbody>' + rows + '</tbody>',
+      '<tbody>' + rows + totalRow + '</tbody>',
       '</table>',
       // Pied de page
       '<div class="footer">',
       '  <div>Rapport officiel issu de l\'application Data Appro.</div>',
-      `  <div>Imprimé le ${now.toLocaleDateString('fr-FR')}</div>`,
+      `  <div>Imprimé le ${now.toLocaleDateString('fr-FR')} à ${now.toLocaleTimeString('fr-FR')}</div>`,
       '</div>',
       '</body></html>',
     ].join('');
@@ -171,6 +207,7 @@ export default function HistoriquePage() {
       setTimeout(() => document.body.removeChild(iframe), 500);
     }, 400);
   };
+
 
   return (
     <div className="p-4 md:p-6 max-w-6xl mx-auto space-y-4 md:space-y-6">
