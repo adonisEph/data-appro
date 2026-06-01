@@ -106,7 +106,7 @@ export const campagnesApi = {
 // Historique
 export const historiqueApi = {
   stats: () => request<DashboardStats>('/historique/stats'),
-  transactions: (params: { agent_id?: number; campagne_id?: number; statut?: string; telephone?: string }) => {
+  transactions: (params: { agent_id?: number; campagne_id?: number; statut?: string; telephone?: string; date?: string }) => {
     const qs = new URLSearchParams(Object.fromEntries(Object.entries(params).filter(([,v]) => v !== undefined && v !== '').map(([k,v]) => [k, String(v)]))).toString();
     return request<{ transactions: Transaction[]; total: number }>(`/historique/transactions${qs ? '?' + qs : ''}`);
   },
