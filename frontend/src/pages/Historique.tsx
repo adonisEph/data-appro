@@ -61,144 +61,114 @@ export default function HistoriquePage() {
   };
 
   const handlePrint = () => {
-    const printContent = document.getElementById('print-area')?.innerHTML;
-    if (!printContent) return;
+    if (txList.length === 0) return;
+
+    // ── Filtres appliqués ──────────────────────────────────────────────────
+    const filtersParts: string[] = [];
+    if (applied.telephone) filtersParts.push(`<span><strong>Téléphone :</strong> ${fmtTelephone(applied.telephone)}</span>`);
+    if (applied.statut)    filtersParts.push(`<span><strong>Statut :</strong> ${applied.statut}</span>`);
+    if (applied.mois)      filtersParts.push(`<span><strong>Campagne :</strong> ${fmtMois(applied.mois)}</span>`);
+    if (!filtersParts.length) filtersParts.push('<span><strong>Filtres :</strong> Aucun (liste complète)</span>');
+    filtersParts.push(`<span style="margin-left:auto"><strong>Total transactions :</strong> ${txList.length}</span>`);
+
+    // ── Lignes du tableau ──────────────────────────────────────────────────
+    const rows = txList.map(tx => {
+      const nom      = `${tx.prenom ?? ''} ${tx.nom ?? ''}`.trim();
+      const tel      = fmtTelephone(tx.telephone);
+      const role     = tx.role_label ?? tx.role ?? '—';
+      const campagne = tx.mois ? fmtMois(tx.mois) : `#${tx.campagne_id}`;
+      const montant  = tx.montant_fcfa ? tx.montant_fcfa.toLocaleString('fr-FR') + ' F' : '—';
+      const date     = fmtDateTime(tx.tente_le);
+
+      let statutLabel = tx.statut;
+      let statutClass = 'attente';
+      if (tx.statut === 'confirme') { statutLabel = 'Confirmé'; statutClass = 'confirme'; }
+      else if (tx.statut === 'echec') { statutLabel = 'Échec'; statutClass = 'echec'; }
+
+      return [
+        `<tr>`,
+        `  <td style="font-weight:500">${nom}</td>`,
+        `  <td style="font-family:monospace">${tel}</td>`,
+        `  <td>${role}</td>`,
+        `  <td>${campagne}</td>`,
+        `  <td><span class="statut-badge ${statutClass}">${statutLabel}</span></td>`,
+        `  <td style="font-weight:600;text-align:right">${montant}</td>`,
+        `  <td style="font-size:10px">${date}</td>`,
+        `</tr>`,
+      ].join('');
+    }).join('');
+
+    const now = new Date();
+    const printHTML = [
+      '<!DOCTYPE html><html><head>',
+      '<meta charset="UTF-8">',
+      '<title>Rapport Audit – Historique des Approvisionnements</title>',
+      '<style>',
+      'body{font-family:ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;color:#111827;background:#fff;margin:0;padding:20px}',
+      '.header{display:flex;justify-content:space-between;align-items:center;border-bottom:2px solid #111827;padding-bottom:12px;margin-bottom:20px}',
+      '.title{font-size:18px;font-weight:bold;text-transform:uppercase;letter-spacing:.05em}',
+      '.subtitle{font-size:11px;color:#6b7280;margin-top:4px}',
+      '.meta{font-size:10px;color:#4b5563;text-align:right;line-height:1.4}',
+      '.filters-summary{background:#f9fafb;border:1px solid #e5e7eb;border-radius:6px;padding:10px 14px;margin-bottom:20px;font-size:11px;display:flex;gap:24px;flex-wrap:wrap}',
+      'table{width:100%;border-collapse:collapse;margin-top:10px}',
+      'th{background:#f3f4f6;color:#374151;font-weight:600;text-transform:uppercase;font-size:9px;padding:8px 10px;border-bottom:2px solid #d1d5db;text-align:left}',
+      'td{padding:8px 10px;border-bottom:1px solid #e5e7eb;font-size:11px}',
+      'tr:nth-child(even) td{background:#f9fafb}',
+      '.statut-badge{display:inline-block;padding:2px 6px;border-radius:4px;font-size:9px;font-weight:600;text-transform:uppercase}',
+      '.statut-badge.confirme{background:#d1fae5;color:#065f46}',
+      '.statut-badge.echec{background:#fee2e2;color:#991b1b}',
+      '.statut-badge.attente{background:#f3f4f6;color:#374151}',
+      '.footer{margin-top:30px;padding-top:10px;border-top:1px solid #e5e7eb;display:flex;justify-content:space-between;font-size:9px;color:#6b7280}',
+      '@media print{@page{size:A4 portrait;margin:15mm}body{padding:0}}',
+      '</style></head><body>',
+      // En-tête
+      '<div class="header">',
+      '  <div>',
+      '    <div class="title">Rapport d\'Audit – Historique des Approvisionnements</div>',
+      '    <div class="subtitle">Système Data Appro – Airtel Congo CG</div>',
+      '  </div>',
+      '  <div class="meta">',
+      `    <p><strong>Généré le :</strong> ${now.toLocaleDateString('fr-FR')} à ${now.toLocaleTimeString('fr-FR')}</p>`,
+      `    <p><strong>Opérateur :</strong> ${user?.prenom ?? ''} ${user?.nom ?? ''} (${user?.email ?? ''})</p>`,
+      '  </div>',
+      '</div>',
+      // Filtres
+      '<div class="filters-summary">' + filtersParts.join('') + '</div>',
+      // Tableau
+      '<table><thead><tr>',
+      '<th style="width:22%">Agent</th>',
+      '<th style="width:18%">Téléphone</th>',
+      '<th style="width:14%">Rôle</th>',
+      '<th style="width:14%">Campagne</th>',
+      '<th style="width:10%">Statut</th>',
+      '<th style="width:12%;text-align:right">Montant</th>',
+      '<th style="width:18%">Date</th>',
+      '</tr></thead>',
+      '<tbody>' + rows + '</tbody>',
+      '</table>',
+      // Pied de page
+      '<div class="footer">',
+      '  <div>Rapport officiel issu de l\'application Data Appro.</div>',
+      `  <div>Imprimé le ${now.toLocaleDateString('fr-FR')}</div>`,
+      '</div>',
+      '</body></html>',
+    ].join('');
 
     const iframe = document.createElement('iframe');
-    iframe.style.position = 'fixed';
-    iframe.style.right = '0';
-    iframe.style.bottom = '0';
-    iframe.style.width = '0';
-    iframe.style.height = '0';
-    iframe.style.border = '0';
+    iframe.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0';
     document.body.appendChild(iframe);
 
     const doc = iframe.contentWindow?.document;
-    if (!doc) return;
+    if (!doc) { document.body.removeChild(iframe); return; }
 
     doc.open();
-    doc.write(`
-      <!DOCTYPE html>
-      <html>
-        <head>
-          <title>Rapport d'Audit - Historique des Approvisionnements</title>
-          <style>
-            body {
-              font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-              color: #111827;
-              background-color: #fff;
-              margin: 0;
-              padding: 20px;
-            }
-            .header {
-              display: flex;
-              justify-content: space-between;
-              align-items: center;
-              border-bottom: 2px solid #111827;
-              padding-bottom: 12px;
-              margin-bottom: 20px;
-            }
-            .title {
-              font-size: 18px;
-              font-weight: bold;
-              text-transform: uppercase;
-              letter-spacing: 0.05em;
-            }
-            .subtitle {
-              font-size: 11px;
-              color: #6b7280;
-              margin-top: 4px;
-            }
-            .meta {
-              font-size: 10px;
-              color: #4b5563;
-              text-align: right;
-              line-height: 1.4;
-            }
-            .filters-summary {
-              background-color: #f9fafb;
-              border: 1px solid #e5e7eb;
-              border-radius: 6px;
-              padding: 10px 14px;
-              margin-bottom: 20px;
-              font-size: 11px;
-              display: flex;
-              gap: 24px;
-            }
-            table {
-              width: 100%;
-              border-collapse: collapse;
-              margin-top: 10px;
-            }
-            th {
-              background-color: #f3f4f6;
-              color: #374151;
-              font-weight: 600;
-              text-transform: uppercase;
-              font-size: 9px;
-              padding: 8px 10px;
-              border-bottom: 2px solid #d1d5db;
-              text-align: left;
-            }
-            td {
-              padding: 8px 10px;
-              border-bottom: 1px solid #e5e7eb;
-              font-size: 11px;
-            }
-            tr:nth-child(even) td {
-              background-color: #f9fafb;
-            }
-            .statut-badge {
-              display: inline-block;
-              padding: 2px 6px;
-              border-radius: 4px;
-              font-size: 9px;
-              font-weight: 600;
-              text-transform: uppercase;
-            }
-            .statut-badge.confirme {
-              background-color: #d1fae5;
-              color: #065f46;
-            }
-            .statut-badge.echec {
-              background-color: #fee2e2;
-              color: #991b1b;
-            }
-            .statut-badge.attente {
-              background-color: #f3f4f6;
-              color: #374151;
-            }
-            .footer {
-              margin-top: 30px;
-              padding-top: 10px;
-              border-top: 1px solid #e5e7eb;
-              display: flex;
-              justify-content: space-between;
-              font-size: 9px;
-              color: #6b7280;
-            }
-            @media print {
-              @page {
-                size: A4 portrait;
-                margin: 15mm;
-              }
-              body {
-                padding: 0;
-              }
-            }
-          </style>
-        </head>
-        <body>
-          \${printContent}
-        </body>
-      </html>
-    `);
+    doc.write(printHTML);
     doc.close();
 
     iframe.contentWindow?.focus();
     setTimeout(() => {
       iframe.contentWindow?.print();
-      document.body.removeChild(iframe);
+      setTimeout(() => document.body.removeChild(iframe), 500);
     }, 400);
   };
 
@@ -333,73 +303,7 @@ export default function HistoriquePage() {
         </>
       )}
 
-      {/* Zone d'impression masquée (servant de template HTML) */}
-      <div id="print-area" className="hidden">
-        <div className="header">
-          <div>
-            <div className="title">Rapport d'Audit - Historique des Approvisionnements</div>
-            <div className="subtitle">Système Data Appro Airtel Congo CG</div>
-          </div>
-          <div className="meta">
-            <p><strong>Généré le :</strong> {new Date().toLocaleDateString('fr-FR')} à {new Date().toLocaleTimeString('fr-FR')}</p>
-            <p><strong>Opérateur :</strong> {user?.prenom} {user?.nom} ({user?.email})</p>
-          </div>
-        </div>
-
-        <div className="filters-summary">
-          {applied.telephone && (
-            <div><strong>Téléphone :</strong> {fmtTelephone(applied.telephone)}</div>
-          )}
-          {applied.statut && (
-            <div><strong>Statut :</strong> <span className="capitalize">{applied.statut}</span></div>
-          )}
-          {applied.mois && (
-            <div><strong>Campagne :</strong> {fmtMois(applied.mois)}</div>
-          )}
-          {!applied.telephone && !applied.statut && !applied.mois && (
-            <div><strong>Filtres :</strong> Aucun (liste complète)</div>
-          )}
-          <div style={{ marginLeft: 'auto' }}><strong>Total transactions :</strong> {txList.length}</div>
-        </div>
-
-        <table>
-          <thead>
-            <tr>
-              <th style={{ width: '25%' }}>Agent</th>
-              <th style={{ width: '20%' }}>Téléphone</th>
-              <th style={{ width: '15%' }}>Rôle</th>
-              <th style={{ width: '15%' }}>Campagne</th>
-              <th style={{ width: '10%' }}>Statut</th>
-              <th style={{ width: '15%', textAlign: 'right' }}>Montant</th>
-              <th style={{ width: '20%' }}>Date</th>
-            </tr>
-          </thead>
-          <tbody>
-            {txList.map(tx => (
-              <tr key={tx.id}>
-                <td style={{ fontWeight: '500' }}>{tx.prenom} {tx.nom}</td>
-                <td style={{ fontFamily: 'monospace' }}>{fmtTelephone(tx.telephone)}</td>
-                <td>{tx.role_label ?? tx.role ?? '—'}</td>
-                <td>{tx.mois ? fmtMois(tx.mois) : `#${tx.campagne_id}`}</td>
-                <td>
-                  <span className={`statut-badge ${tx.statut === 'confirme' ? 'confirme' : tx.statut === 'echec' ? 'echec' : 'attente'}`}>
-                    {tx.statut === 'confirme' ? 'Confirmé' : tx.statut === 'echec' ? 'Échec' : tx.statut}
-                  </span>
-                </td>
-                <td style={{ fontWeight: '600', textAlign: 'right' }}>
-                  {tx.montant_fcfa ? tx.montant_fcfa.toLocaleString('fr-FR') + ' F' : '—'}
-                </td>
-                <td style={{ fontSize: '10px' }}>{fmtDateTime(tx.tente_le)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-
-        <div className="footer">
-          <div>Rapport officiel issu de l'application Data Appro.</div>
-          <div>Page 1 sur 1</div>
-        </div>
-      </div>
+      {/* Zone d'impression supprimée : le HTML est désormais généré dynamiquement dans handlePrint() */}
 
       {/* Modal preuve */}
       <Modal open={preuveId !== null} onClose={() => setPreuveId(null)} title="Preuve de transaction">
