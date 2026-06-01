@@ -1592,7 +1592,7 @@ const historiqueRouter = new Hono<AppEnv>();
 historiqueRouter.use('*', authMiddleware, requireCanViewHistorique);
 
 historiqueRouter.get('/transactions', async c => {
-  const { agent_id, campagne_id, statut, telephone, date } = c.req.query();
+  const { agent_id, campagne_id, statut, telephone, mois } = c.req.query();
   const user = c.get('user');
   const isSuperAdmin = Boolean((user as JWTPayload | undefined)?.is_super_admin);
   const trackedSet = !isSuperAdmin ? await fetchTrackedAgentIdSet(c.env.DB) : new Set<number>();
@@ -1602,7 +1602,7 @@ historiqueRouter.get('/transactions', async c => {
   if (agent_id)    { query += ' AND t.agent_id = ?';    params.push(Number(agent_id)); }
   if (campagne_id) { query += ' AND t.campagne_id = ?'; params.push(Number(campagne_id)); }
   if (statut)      { query += ' AND t.statut = ?';      params.push(statut); }
-  if (date)        { query += ' AND DATE(t.tente_le) = DATE(?)'; params.push(date); }
+  if (mois)        { query += ' AND c.mois = ?';        params.push(mois); }
   if (telephone)   {
     const normalizedTel = String(telephone).replace(/\D/g, '').trim();
     query += ' AND t.telephone LIKE ?';

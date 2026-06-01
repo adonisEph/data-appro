@@ -6,8 +6,8 @@ import { fmtDateTime, fmtMois, fmtTelephone } from '../lib/utils';
 import { useAuth } from '../hooks/useAuth';
 
 export default function HistoriquePage() {
-  const [filters, setFilters]   = useState({ telephone: '', statut: '', date: '' });
-  const [applied, setApplied]   = useState<typeof filters>({ telephone: '', statut: '', date: '' });
+  const [filters, setFilters]   = useState({ telephone: '', statut: '', mois: '' });
+  const [applied, setApplied]   = useState<typeof filters>({ telephone: '', statut: '', mois: '' });
   const [preuveId, setPreuveId] = useState<number | null>(null);
   const { isSuperAdmin, user } = useAuth();
 
@@ -34,7 +34,7 @@ export default function HistoriquePage() {
     queryFn: () => historiqueApi.transactions({
       telephone:   applied.telephone   || undefined,
       statut:      applied.statut      || undefined,
-      date:        applied.date        || undefined,
+      mois:        applied.mois        || undefined,
     }),
   });
 
@@ -55,7 +55,7 @@ export default function HistoriquePage() {
   const trackedSet = new Set<number>((trackedData?.tracked_agents ?? []).map(a => a.agent_id));
 
   const handleReset = () => {
-    const defaultFilters = { telephone: '', statut: '', date: '' };
+    const defaultFilters = { telephone: '', statut: '', mois: '' };
     setFilters(defaultFilters);
     setApplied(defaultFilters);
   };
@@ -232,9 +232,9 @@ export default function HistoriquePage() {
           </div>
 
           <div className="flex flex-col gap-1.5">
-            <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Campagne (Date)</label>
-            <input type="date" value={filters.date}
-              onChange={e => setFilters(f => ({ ...f, date: e.target.value }))}
+            <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Campagne (Mois)</label>
+            <input type="month" value={filters.mois}
+              onChange={e => setFilters(f => ({ ...f, mois: e.target.value }))}
               className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 w-full"/>
           </div>
         </div>
@@ -353,10 +353,10 @@ export default function HistoriquePage() {
           {applied.statut && (
             <div><strong>Statut :</strong> <span className="capitalize">{applied.statut}</span></div>
           )}
-          {applied.date && (
-            <div><strong>Date :</strong> {new Date(applied.date).toLocaleDateString('fr-FR')}</div>
+          {applied.mois && (
+            <div><strong>Campagne :</strong> {fmtMois(applied.mois)}</div>
           )}
-          {!applied.telephone && !applied.statut && !applied.date && (
+          {!applied.telephone && !applied.statut && !applied.mois && (
             <div><strong>Filtres :</strong> Aucun (liste complète)</div>
           )}
           <div style={{ marginLeft: 'auto' }}><strong>Total transactions :</strong> {txList.length}</div>
@@ -382,7 +382,7 @@ export default function HistoriquePage() {
                 <td>{tx.role_label ?? tx.role ?? '—'}</td>
                 <td>{tx.mois ? fmtMois(tx.mois) : `#${tx.campagne_id}`}</td>
                 <td>
-                  <span className={`statut-badge \${tx.statut === 'confirme' ? 'confirme' : tx.statut === 'echec' ? 'echec' : 'attente'}`}>
+                  <span className={`statut-badge ${tx.statut === 'confirme' ? 'confirme' : tx.statut === 'echec' ? 'echec' : 'attente'}`}>
                     {tx.statut === 'confirme' ? 'Confirmé' : tx.statut === 'echec' ? 'Échec' : tx.statut}
                   </span>
                 </td>
