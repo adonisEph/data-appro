@@ -63,7 +63,7 @@ export interface Campagne {
 export interface Transaction {
   id: number; campagne_id: number; agent_id: number;
   nom?: string; prenom?: string; role?: Role; role_label?: string;
-  mois?: string;
+  mois?: string; prix_cfa?: number;
   telephone: string; montant_fcfa: number | null; option_used: 'argent' | 'forfait';
   statut: StatutTransaction; airtel_transaction_id: string | null;
   airtel_reference: string | null; airtel_status: string | null;

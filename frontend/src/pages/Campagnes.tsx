@@ -12,6 +12,8 @@ import {
   ProgressBar, Spinner, EmptyState, Modal,
 } from '../components/ui';
 import { fmtFCFA, fmtMois, fmtTelephone, fmtPct } from '../lib/utils';
+import * as XLSX from 'xlsx';
+import { ROLE_QUOTAS } from '../types';
 
 // ══════════════════════════════════════════════════════════
 // Liste des campagnes
@@ -317,6 +319,81 @@ export function CampagneDetailPage() {
       .catch(() => toast.error('Export échoué', 'Impossible de télécharger le fichier CSV.'));
   };
 
+  const getTxMontant = (tx: any, agent?: any): number => {
+    if (tx.montant_fcfa != null && tx.montant_fcfa > 0) return tx.montant_fcfa;
+    if (tx.prix_cfa != null && tx.prix_cfa > 0) return tx.prix_cfa;
+    if (agent && agent.prix_cfa > 0) return agent.prix_cfa;
+    const rolePrices: Record<string, number> = {
+      technicien: 5500,
+      responsable_junior: 9000,
+      responsable_senior: 15000,
+      manager: 22000,
+    };
+    return rolePrices[tx.role ?? agent?.role ?? ''] ?? 0;
+  };
+
+  const handleExportExcel = () => {
+    const agentById = new Map<number, any>();
+    if (agentsData?.agents) {
+      agentsData.agents.forEach(a => agentById.set(a.id, a));
+    }
+
+    const rows = transactions.map(tx => {
+      const agent = agentById.get(tx.agent_id);
+      const quota = agent?.quota_gb ?? (tx.role ? ROLE_QUOTAS[tx.role] : 0);
+      const montant = getTxMontant(tx, agent);
+      
+      let statutLabel = tx.statut as string;
+      if (tx.statut === 'confirme') statutLabel = 'Confirmé';
+      else if (tx.statut === 'echec') statutLabel = 'Échec';
+      else if (tx.statut === 'en_attente') statutLabel = 'En attente';
+      else if (tx.statut === 'double_detected') statutLabel = 'Doublon';
+
+      return {
+        'Agent': `${tx.prenom ?? ''} ${tx.nom ?? ''}`.trim(),
+        'Téléphone': tx.telephone,
+        'Option': tx.option_used === 'argent' ? 'Argent' : 'Forfait',
+        'Quota (GB)': quota,
+        'Montant (FCFA)': montant,
+        'Statut': statutLabel,
+        'Référence Airtel': tx.airtel_transaction_id ?? tx.airtel_reference ?? '—'
+      };
+    });
+
+    const totalMontant = transactions
+      .filter(tx => tx.statut === 'confirme')
+      .reduce((sum, tx) => sum + getTxMontant(tx, agentById.get(tx.agent_id)), 0);
+
+    // Ajout d'une ligne vide
+    rows.push({
+      'Agent': '',
+      'Téléphone': '',
+      'Option': '',
+      'Quota (GB)': '',
+      'Montant (FCFA)': '',
+      'Statut': '',
+      'Référence Airtel': ''
+    } as any);
+
+    // Ajout de la ligne de total
+    rows.push({
+      'Agent': 'TOTAL BUDGET UTILISÉ',
+      'Téléphone': '',
+      'Option': '',
+      'Quota (GB)': '',
+      'Montant (FCFA)': totalMontant,
+      'Statut': '',
+      'Référence Airtel': ''
+    } as any);
+
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.json_to_sheet(rows);
+    XLSX.utils.book_append_sheet(wb, ws, 'Rapport Campagne');
+
+    const fileName = `campagne-${campagne?.mois ?? id}.xlsx`;
+    XLSX.writeFile(wb, fileName);
+  };
+
   const filteredTx = transactions.filter(tx => {
     const matchStatut = !filterStatut || tx.statut === filterStatut;
     const matchSearch = !search ||
@@ -520,9 +597,14 @@ export function CampagneDetailPage() {
           </Button>
         )}
         {transactions.length > 0 && (
-          <Button variant="secondary" onClick={handleExportCSV}>
-            ⬇ Exporter CSV
-          </Button>
+          <>
+            <Button variant="secondary" onClick={handleExportCSV}>
+              ⬇ Exporter CSV
+            </Button>
+            <Button variant="secondary" onClick={handleExportExcel}>
+              📊 Exporter Excel (.xlsx)
+            </Button>
+          </>
         )}
       </div>
 

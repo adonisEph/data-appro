@@ -2,8 +2,21 @@ import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { historiqueApi, trackedAgentsApi } from '../lib/api';
 import { Card, TxBadge, RoleBadge, Modal, Button, Spinner } from '../components/ui';
-import { fmtDateTime, fmtMois, fmtTelephone } from '../lib/utils';
+import { fmtDateTime, fmtMois, fmtTelephone, fmtFCFA } from '../lib/utils';
 import { useAuth } from '../hooks/useAuth';
+import type { Transaction } from '../types';
+
+const getTxMontant = (tx: any): number => {
+  if (tx.montant_fcfa != null && tx.montant_fcfa > 0) return tx.montant_fcfa;
+  if (tx.prix_cfa != null && tx.prix_cfa > 0) return tx.prix_cfa;
+  const rolePrices: Record<string, number> = {
+    technicien: 5500,
+    responsable_junior: 9000,
+    responsable_senior: 15000,
+    manager: 22000,
+  };
+  return rolePrices[tx.role ?? ''] ?? 0;
+};
 
 export default function HistoriquePage() {
   const [filters, setFilters]   = useState({ telephone: '', statut: '', mois: '' });
@@ -60,38 +73,60 @@ export default function HistoriquePage() {
     setApplied(defaultFilters);
   };
 
-  const handlePrint = () => {
+  const handlePrint = async () => {
     // ── Obligation de sélectionner une campagne (mois) ────────────────────
-    if (!applied.mois) {
-      alert('Veuillez sélectionner une Campagne (mois) avant d\'imprimer.\n\nL\'impression est associée à une campagne spécifique.');
+    if (!filters.mois) {
+      alert("Veuillez sélectionner une Campagne (mois) avant d'imprimer.\n\nL'impression est associée à une campagne spécifique.");
       return;
     }
-    if (txList.length === 0) return;
+
+    let listToPrint = txList;
+    const hasUnappliedFilters = filters.telephone !== applied.telephone || 
+                                filters.statut !== applied.statut || 
+                                filters.mois !== applied.mois;
+
+    if (hasUnappliedFilters) {
+      setApplied(filters);
+      try {
+        const res = await historiqueApi.transactions({
+          telephone: filters.telephone || undefined,
+          statut: filters.statut || undefined,
+          mois: filters.mois || undefined,
+        });
+        listToPrint = res.transactions ?? [];
+      } catch (err) {
+        alert("Erreur lors de la récupération des données pour l'impression.");
+        return;
+      }
+    }
+
+    if (listToPrint.length === 0) {
+      alert("Aucune transaction trouvée pour les filtres sélectionnés.");
+      return;
+    }
 
     // ── Calcul des totaux ─────────────────────────────────────────────────
-    const nbConfirme  = txList.filter(tx => tx.statut === 'confirme').length;
-    const nbEchec     = txList.filter(tx => tx.statut === 'echec').length;
-    const nbAttente   = txList.filter(tx => tx.statut !== 'confirme' && tx.statut !== 'echec').length;
-    // montant_fcfa peut être null (transactions non-argent) ou 0 — on ne prend que les positifs confirmés
-    const totalMontant = txList
-      .filter(tx => tx.statut === 'confirme' && tx.montant_fcfa != null && (tx.montant_fcfa as number) > 0)
-      .reduce((sum, tx) => sum + (tx.montant_fcfa as number), 0);
+    const nbConfirme  = listToPrint.filter(tx => tx.statut === 'confirme').length;
+    const nbEchec     = listToPrint.filter(tx => tx.statut === 'echec').length;
+    const nbAttente   = listToPrint.filter(tx => tx.statut !== 'confirme' && tx.statut !== 'echec').length;
+    const totalMontant = listToPrint
+      .filter(tx => tx.statut === 'confirme')
+      .reduce((sum, tx) => sum + getTxMontant(tx), 0);
 
     // ── Filtres résumé ────────────────────────────────────────────────────
     const filtersParts: string[] = [];
-    if (applied.telephone) filtersParts.push(`<span><strong>Téléphone :</strong> ${fmtTelephone(applied.telephone)}</span>`);
-    if (applied.statut)    filtersParts.push(`<span><strong>Statut :</strong> ${applied.statut}</span>`);
-    filtersParts.push(`<span><strong>Campagne :</strong> ${fmtMois(applied.mois)}</span>`);
-    filtersParts.push(`<span style="margin-left:auto"><strong>Total :</strong> ${txList.length} transaction${txList.length > 1 ? 's' : ''}</span>`);
+    if (filters.telephone) filtersParts.push(`<span><strong>Téléphone :</strong> ${fmtTelephone(filters.telephone)}</span>`);
+    if (filters.statut)    filtersParts.push(`<span><strong>Statut :</strong> ${filters.statut}</span>`);
+    filtersParts.push(`<span><strong>Campagne :</strong> ${fmtMois(filters.mois)}</span>`);
+    filtersParts.push(`<span style="margin-left:auto"><strong>Total :</strong> ${listToPrint.length} transaction${listToPrint.length > 1 ? 's' : ''}</span>`);
 
     // ── Lignes du tableau ─────────────────────────────────────────────────
-    const rows = txList.map((tx, idx) => {
+    const rows = listToPrint.map((tx, idx) => {
       const nom      = `${tx.prenom ?? ''} ${tx.nom ?? ''}`.trim();
       const tel      = fmtTelephone(tx.telephone as string);
       const role     = (tx.role_label ?? tx.role ?? '—') as string;
-      // Correction : montant_fcfa peut être null (pas d'argent) ou un nombre (y compris 0)
-      const montantRaw = tx.montant_fcfa as number | null | undefined;
-      const montant  = montantRaw != null && montantRaw > 0
+      const montantRaw = getTxMontant(tx);
+      const montant  = montantRaw > 0
         ? montantRaw.toLocaleString('fr-FR') + ' F'
         : '—';
       const date     = fmtDateTime(tx.tente_le as string);
@@ -118,7 +153,7 @@ export default function HistoriquePage() {
     const totalRow = [
       '<tr style="background:#1e3a5f">',
       `  <td colspan="3" style="padding:10px;font-weight:700;font-size:11px;color:#fff;border-top:2px solid #1e3a5f">`,
-      `    TOTAUX CAMPAGNE — ${fmtMois(applied.mois)}`,
+      `    TOTAUX CAMPAGNE — ${fmtMois(filters.mois)}`,
       `  </td>`,
       `  <td style="padding:10px;font-size:10px;color:#fff;border-top:2px solid #1e3a5f">`,
       `    <span style="display:block">✓ Confirmés : <strong>${nbConfirme}</strong></span>`,
@@ -129,7 +164,7 @@ export default function HistoriquePage() {
       totalMontant > 0 ? totalMontant.toLocaleString('fr-FR') + ' F' : '—',
       `  </td>`,
       `  <td style="padding:10px;font-size:10px;color:#93c5fd;border-top:2px solid #1e3a5f">`,
-      `    ${txList.length} transaction${txList.length > 1 ? 's' : ''}`,
+      `    ${listToPrint.length} transaction${listToPrint.length > 1 ? 's' : ''}`,
       `  </td>`,
       '</tr>',
     ].join('');
@@ -138,7 +173,7 @@ export default function HistoriquePage() {
     const printHTML = [
       '<!DOCTYPE html><html><head>',
       '<meta charset="UTF-8">',
-      `<title>Rapport Campagne ${fmtMois(applied.mois)} – Data Appro</title>`,
+      `<title>Rapport Campagne ${fmtMois(filters.mois)} – Data Appro</title>`,
       '<style>',
       'body{font-family:ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;color:#111827;background:#fff;margin:0;padding:20px}',
       '.header{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid #111827;padding-bottom:12px;margin-bottom:16px}',
@@ -160,7 +195,7 @@ export default function HistoriquePage() {
       '<div class="header">',
       '  <div>',
       '    <div class="title">Rapport d\'Audit – Approvisionnements</div>',
-      `    <div class="campagne-badge">CAMPAGNE : ${fmtMois(applied.mois).toUpperCase()}</div>`,
+      `    <div class="campagne-badge">CAMPAGNE : ${fmtMois(filters.mois).toUpperCase()}</div>`,
       '    <div class="subtitle">Système Data Appro – Airtel Congo CG</div>',
       '  </div>',
       '  <div class="meta">',
@@ -280,6 +315,7 @@ export default function HistoriquePage() {
                     <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Rôle</th>
                     <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Campagne</th>
                     <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Statut</th>
+                    <th className="text-right px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Montant</th>
                     <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Date</th>
                     <th className="text-right px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Preuve</th>
                   </tr>
@@ -299,6 +335,7 @@ export default function HistoriquePage() {
                       <td className="px-4 py-3">{tx.role && <RoleBadge role={tx.role}/>}</td>
                       <td className="px-4 py-3 text-xs text-gray-500">{tx.mois ? fmtMois(tx.mois) : `#${tx.campagne_id}`}</td>
                       <td className="px-4 py-3"><TxBadge statut={tx.statut}/></td>
+                      <td className="px-4 py-3 text-right font-semibold text-gray-950">{fmtFCFA(getTxMontant(tx))}</td>
                       <td className="px-4 py-3 text-xs text-gray-500">{fmtDateTime(tx.tente_le)}</td>
                       <td className="px-4 py-3 text-right">
                         <button onClick={() => setPreuveId(tx.id)} className="text-brand-600 hover:text-brand-800 text-xs font-medium">Voir →</button>
@@ -327,7 +364,10 @@ export default function HistoriquePage() {
                     </div>
                     <p className="font-mono text-xs text-gray-500">{fmtTelephone(tx.telephone)}</p>
                   </div>
-                  <TxBadge statut={tx.statut}/>
+                  <div className="text-right">
+                    <TxBadge statut={tx.statut}/>
+                    <p className="text-xs font-semibold text-gray-950 mt-1">{fmtFCFA(getTxMontant(tx))}</p>
+                  </div>
                 </div>
                 <div className="flex items-center justify-between text-xs text-gray-500">
                   <span>{tx.mois ? fmtMois(tx.mois) : `Campagne #${tx.campagne_id}`} · {fmtDateTime(tx.tente_le)}</span>

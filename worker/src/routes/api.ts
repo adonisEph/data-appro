@@ -1596,7 +1596,7 @@ historiqueRouter.get('/transactions', async c => {
   const user = c.get('user');
   const isSuperAdmin = Boolean((user as JWTPayload | undefined)?.is_super_admin);
   const trackedSet = !isSuperAdmin ? await fetchTrackedAgentIdSet(c.env.DB) : new Set<number>();
-  let query = `SELECT t.*, a.nom, a.prenom, a.role, a.role_label, c.mois
+  let query = `SELECT t.*, a.nom, a.prenom, a.role, a.role_label, a.prix_cfa, c.mois
                FROM transactions t JOIN agents a ON a.id = t.agent_id JOIN campagnes c ON c.id = t.campagne_id WHERE 1=1`;
   const params: unknown[] = [];
   if (agent_id)    { query += ' AND t.agent_id = ?';    params.push(Number(agent_id)); }
@@ -1626,7 +1626,7 @@ historiqueRouter.get('/transactions/:id/preuve', async c => {
   const isSuperAdmin = Boolean((user as JWTPayload | undefined)?.is_super_admin);
   const trackedSet = !isSuperAdmin ? await fetchTrackedAgentIdSet(c.env.DB) : new Set<number>();
   const tx = await c.env.DB.prepare(
-    `SELECT t.*, a.nom, a.prenom, a.telephone as agent_tel, a.role, a.role_label, c.mois, c.budget_fcfa, c.compte_source
+    `SELECT t.*, a.nom, a.prenom, a.telephone as agent_tel, a.role, a.role_label, a.prix_cfa, c.mois, c.budget_fcfa, c.compte_source
      FROM transactions t JOIN agents a ON a.id = t.agent_id JOIN campagnes c ON c.id = t.campagne_id WHERE t.id = ?`
   ).bind(id).first();
   if (!tx) return c.json({ error: 'Transaction introuvable' }, 404);
