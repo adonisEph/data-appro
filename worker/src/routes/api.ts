@@ -1291,11 +1291,22 @@ campagnesRouter.get('/:id/eligible-agents', async c => {
   ).bind(cutoff).all();
 
   const agentsAll = results ?? [];
+
+  // Récupérer les agent_ids déjà traités (confirme ou echec) pour cette campagne
+  const { results: doneRows } = await c.env.DB.prepare(
+    `SELECT DISTINCT agent_id FROM transactions WHERE campagne_id = ? AND statut IN ('confirme', 'echec')`
+  ).bind(id).all<{ agent_id: number }>();
+  const doneSet = new Set<number>((doneRows ?? []).map(r => Number(r.agent_id)));
+
   let agents: typeof agentsAll;
   if (isSuperAdmin) {
     agents = agentsAll;
   } else if (isAssistant) {
-    agents = agentsAll.filter(a => assistantSet.has(Number((a as { id?: unknown }).id)));
+    // Assistant-Appro: uniquement ses agents assignés ET non encore traités
+    agents = agentsAll.filter(a =>
+      assistantSet.has(Number((a as { id?: unknown }).id)) &&
+      !doneSet.has(Number((a as { id?: unknown }).id))
+    );
   } else {
     agents = agentsAll.filter(a => !isTrackedAgentId(trackedSet, (a as { id?: unknown }).id));
   }
@@ -1545,6 +1556,14 @@ campagnesRouter.post('/:id/manual/validate', noViewerMiddleware, requireCanProvi
 
   const agent = await c.env.DB.prepare(`SELECT * FROM agents WHERE id = ? AND actif = 1`).bind(body.agent_id).first<import('../types/index.js').Agent>();
   if (!agent) return c.json({ error: 'Agent introuvable' }, 404);
+
+  // Empêcher la double validation: si l'agent a déjà une transaction confirme/echec, refuser
+  const existingTx = await c.env.DB.prepare(
+    `SELECT id, statut FROM transactions WHERE campagne_id = ? AND agent_id = ? AND statut IN ('confirme', 'echec') ORDER BY id DESC LIMIT 1`
+  ).bind(campagneId, body.agent_id).first<{ id: number; statut: string }>();
+  if (existingTx) {
+    return c.json({ error: `Cet agent a déjà été traité (statut: ${existingTx.statut})` }, 409);
+  }
 
   // Calcul montant : priorité au montant fourni, sinon prix agent, sinon fallback rôle
   const montant = body.montant_fcfa !== undefined
@@ -1908,6 +1927,90 @@ portalRouter.get('/check-ins', authMiddleware, superAdminMiddleware, async c => 
   ).bind(limit).all();
 
   return c.json({ check_ins: results ?? [], total: results?.length ?? 0 });
+});
+
+// Helper: vérifier le token agent du portail
+async function verifyPortalToken(c: { req: { header: (name: string) => string | undefined }; env: Env }): Promise<number | null> {
+  const auth = c.req.header('Authorization');
+  if (!auth?.startsWith('Bearer ')) return null;
+  const token = auth.slice(7);
+  try {
+    const [header, payload, signature] = token.split('.');
+    if (!header || !payload || !signature) return null;
+    const encoder = new TextEncoder();
+    const key = await crypto.subtle.importKey('raw', encoder.encode(c.env.JWT_SECRET), { name: 'HMAC', hash: 'SHA-256' }, false, ['verify']);
+    const data = encoder.encode(`${header}.${payload}`);
+    const sig = Uint8Array.from(atob(signature.replace(/-/g, '+').replace(/_/g, '/')), ch => ch.charCodeAt(0));
+    const valid = await crypto.subtle.verify('HMAC', key, sig, data);
+    if (!valid) return null;
+    const decoded = JSON.parse(atob(payload)) as JWTPayload;
+    if (decoded.exp < Math.floor(Date.now() / 1000)) return null;
+    if (!decoded.sub.startsWith('agent:')) return null;
+    return decoded.agent_id;
+  } catch {
+    return null;
+  }
+}
+
+// POST /portal/reclamation — agent soumet une réclamation
+portalRouter.post('/reclamation', async c => {
+  const agentId = await verifyPortalToken(c);
+  if (!agentId) return c.json({ error: 'Non autorisé' }, 401);
+
+  const { sujet, message } = await c.req.json<{ sujet?: string; message?: string }>();
+  if (!sujet?.trim() || !message?.trim()) {
+    return c.json({ error: 'Sujet et message requis' }, 400);
+  }
+
+  const agent = await c.env.DB.prepare(`SELECT telephone FROM agents WHERE id = ?`).bind(agentId).first<{ telephone: string }>();
+
+  await c.env.DB.prepare(
+    `INSERT INTO agent_reclamations (agent_id, telephone, sujet, message) VALUES (?, ?, ?, ?)`
+  ).bind(agentId, agent?.telephone ?? '', sujet.trim(), message.trim()).run();
+
+  return c.json({ ok: true });
+});
+
+// GET /portal/reclamations — SuperAdmin: liste des réclamations
+portalRouter.get('/reclamations', authMiddleware, superAdminMiddleware, async c => {
+  const statut = c.req.query('statut');
+  let query = `SELECT r.*, a.nom, a.prenom, a.quota_gb, a.role_label
+               FROM agent_reclamations r
+               LEFT JOIN agents a ON a.id = r.agent_id`;
+  const params: unknown[] = [];
+  if (statut && statut !== 'all') {
+    query += ` WHERE r.statut = ?`;
+    params.push(statut);
+  }
+  query += ` ORDER BY r.created_at DESC LIMIT 500`;
+
+  const { results } = await c.env.DB.prepare(query).bind(...params).all();
+  return c.json({ reclamations: results ?? [] });
+});
+
+// PUT /portal/reclamations/:id — SuperAdmin répond/clôture une réclamation
+portalRouter.put('/reclamations/:id', authMiddleware, superAdminMiddleware, async c => {
+  const id = Number(c.req.param('id'));
+  const { admin_response, statut } = await c.req.json<{ admin_response?: string; statut?: string }>();
+
+  if (!admin_response?.trim() && !statut) {
+    return c.json({ error: 'admin_response ou statut requis' }, 400);
+  }
+
+  const updates: string[] = [];
+  const params: unknown[] = [];
+  if (admin_response?.trim()) {
+    updates.push('admin_response = ?', 'responded_at = datetime(\'now\')');
+    params.push(admin_response.trim());
+  }
+  if (statut) {
+    updates.push('statut = ?');
+    params.push(statut);
+  }
+  params.push(id);
+
+  await c.env.DB.prepare(`UPDATE agent_reclamations SET ${updates.join(', ')} WHERE id = ?`).bind(...params).run();
+  return c.json({ ok: true });
 });
 
 api.route('/portal', portalRouter);

@@ -240,4 +240,21 @@ export const portalApi = {
     request<{ check_ins: Array<{ id: number; agent_id: number; telephone: string; ip_address: string | null; user_agent: string | null; created_at: string; nom: string; prenom: string; quota_gb: number; role_label: string | null }>; total: number }>(
       `/portal/check-ins${limit ? `?limit=${limit}` : ''}`
     ),
+  reclamation: (token: string, sujet: string, message: string) => {
+    return fetch(`${BASE}/portal/reclamation`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+      body: JSON.stringify({ sujet, message }),
+    }).then(async res => {
+      const data = await res.json();
+      if (!res.ok) throw new Error((data as { error?: string }).error ?? 'Erreur');
+      return data as { ok: boolean };
+    });
+  },
+  listReclamations: (statut?: string) =>
+    request<{ reclamations: Array<{ id: number; agent_id: number; telephone: string; sujet: string; message: string; statut: string; admin_response: string | null; responded_at: string | null; created_at: string; nom: string; prenom: string; quota_gb: number; role_label: string | null }> }>(
+      `/portal/reclamations${statut ? `?statut=${statut}` : ''}`
+    ),
+  respondReclamation: (id: number, admin_response: string, statut: string) =>
+    request<{ ok: boolean }>(`/portal/reclamations/${id}`, { method: 'PUT', body: JSON.stringify({ admin_response, statut }) }),
 };

@@ -28,23 +28,23 @@ export default function PortalLogin() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-brand-600 to-indigo-800 flex items-center justify-center p-4">
+    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-brand-900 to-indigo-950 flex items-center justify-center p-4">
       <div className="w-full max-w-md">
         {/* Logo */}
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-16 h-16 bg-white rounded-2xl shadow-lg mb-4">
-            <svg className="w-10 h-10 text-brand-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <div className="inline-flex items-center justify-center w-20 h-20 bg-white rounded-3xl shadow-2xl mb-4">
+            <svg className="w-12 h-12 text-brand-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.111 16.404a5.5 5.5 0 017.778 0M12 20h.01m-7.08-7.071c3.904-3.905 10.236-3.905 14.141 0M1.394 9.393c5.857-5.857 15.355-5.857 21.213 0" />
             </svg>
           </div>
-          <h1 className="text-2xl font-bold text-white">Data Appro</h1>
-          <p className="text-sm text-brand-100 mt-1">Espace Agent — Vérifier mon forfait</p>
+          <h1 className="text-3xl font-black text-white tracking-tight">Data Appro</h1>
+          <p className="text-sm text-white/60 mt-1.5">Espace Agent — Vérifier mon forfait</p>
         </div>
 
         {/* Card */}
-        <div className="bg-white rounded-2xl shadow-xl p-6 space-y-5">
+        <div className="bg-white rounded-3xl shadow-2xl p-7 space-y-5">
           <div>
-            <h2 className="text-lg font-semibold text-gray-900">Connexion</h2>
+            <h2 className="text-lg font-bold text-gray-900">Connexion</h2>
             <p className="text-xs text-gray-500 mt-1">Saisissez votre numéro de téléphone présent dans la flotte pour vérifier votre statut.</p>
           </div>
 
@@ -81,13 +81,11 @@ export default function PortalLogin() {
               <button
                 onClick={install}
                 disabled={isInstalling}
-                className="text-xs text-indigo-600 hover:text-indigo-800 font-medium mb-2"
+                className="inline-flex items-center gap-2 text-xs text-indigo-600 hover:text-indigo-800 font-medium bg-indigo-50 hover:bg-indigo-100 px-4 py-2 rounded-full transition-colors"
               >
                 {isInstalling ? 'Installation…' : '📱 Installer l\'application'}
               </button>
             )}
-            <br />
-            <a href="/login" className="text-xs text-gray-400 hover:text-gray-600">Espace responsable →</a>
           </div>
         </div>
       </div>

@@ -23,7 +23,8 @@ export function CampagnesPage() {
   const qc = useQueryClient();
   const toast = useToast();
   const { isSuperAdmin, user, canProvision } = useAuth();
-  const canLaunch = isSuperAdmin || Boolean(user?.droits?.can_launch_campagne) || canProvision;
+  const canLaunch = isSuperAdmin || Boolean(user?.droits?.can_launch_campagne);
+  const canValidate = canLaunch || canProvision;
   const [deleteCampagne, setDeleteCampagne] = useState<import('../types').Campagne | null>(null);
 
   useQuery({
@@ -75,6 +76,9 @@ export function CampagnesPage() {
               Nouvelle campagne
             </Button>
           </Link>
+        )}
+        {canValidate && !canLaunch && (
+          <span className="text-xs text-gray-400 bg-gray-100 px-3 py-1.5 rounded-lg">Assistant-Appro — Validation manuelle</span>
         )}
       </div>
 
@@ -190,7 +194,8 @@ export function CampagneDetailPage() {
   const toast = useToast();
   const navigate = useNavigate();
   const { isSuperAdmin, user, canProvision } = useAuth();
-  const canLaunch = isSuperAdmin || Boolean(user?.droits?.can_launch_campagne) || canProvision;
+  const canLaunch = isSuperAdmin || Boolean(user?.droits?.can_launch_campagne);
+  const canValidate = canLaunch || canProvision;
   const [filterStatut, setFilterStatut] = useState('');
   const [search, setSearch] = useState('');
   const [confirmLancer, setConfirmLancer] = useState(false);
@@ -665,7 +670,7 @@ export function CampagneDetailPage() {
             </div>
           </div>
 
-          <div className="overflow-x-auto">
+          <div className="hidden md:block overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-gray-100">
@@ -755,9 +760,9 @@ export function CampagneDetailPage() {
                               sms: tx?.airtel_message ?? '',
                               montant_fcfa: a.prix_cfa,
                             })}
-                            disabled={!canLaunch}
+                            disabled={!canValidate}
                             className="text-brand-600 hover:text-brand-800 text-xs font-medium px-2 py-1 rounded hover:bg-brand-50"
-                            title={!canLaunch ? 'Droit "Lancer des campagnes" requis' : undefined}
+                            title={!canValidate ? 'Droit approvisionnement requis' : undefined}
                           >
                             Valider (argent)
                           </button>
@@ -770,9 +775,9 @@ export function CampagneDetailPage() {
                               statut: 'confirme',
                               sms: tx?.airtel_message ?? '',
                             })}
-                            disabled={!canLaunch}
+                            disabled={!canValidate}
                             className="text-amber-700 hover:text-amber-900 text-xs font-medium px-2 py-1 rounded hover:bg-amber-50"
-                            title={!canLaunch ? 'Droit "Lancer des campagnes" requis' : undefined}
+                            title={!canValidate ? 'Droit approvisionnement requis' : undefined}
                           >
                             Valider (forfait)
                           </button>
@@ -783,6 +788,83 @@ export function CampagneDetailPage() {
                 })}
               </tbody>
             </table>
+          </div>
+
+          {/* Cards mobile — boutons Valider accessibles sans scroll horizontal */}
+          <div className="md:hidden divide-y divide-gray-50">
+            {manualRows.map(row => {
+              const a = row.a;
+              const tx = row.tx;
+              const statut = row.statut;
+              return (
+                <div key={a.id} className="p-3 space-y-2">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <p className="font-medium text-gray-900 truncate text-sm">{a.prenom} {a.nom}</p>
+                      <p className="text-xs text-gray-400">{a.role_label ?? ''}</p>
+                    </div>
+                    {statut === 'en_attente' ? (
+                      <span className="shrink-0 text-[10px] bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">En attente</span>
+                    ) : statut === 'confirme' ? (
+                      <span className="shrink-0 text-[10px] bg-green-100 text-green-700 px-2 py-0.5 rounded-full">Confirmé</span>
+                    ) : (
+                      <span className="shrink-0 text-[10px] bg-red-100 text-red-700 px-2 py-0.5 rounded-full">Échec</span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2 text-xs">
+                    <span className="font-mono text-gray-600">{fmtTelephone(a.telephone)}</span>
+                    <button
+                      onClick={async () => {
+                        try {
+                          await navigator.clipboard.writeText(a.telephone);
+                          toast.success('Copié', 'Téléphone copié.');
+                        } catch {
+                          toast.error('Erreur', 'Impossible de copier.');
+                        }
+                      }}
+                      className="px-2 py-0.5 rounded-lg border border-gray-200 hover:bg-gray-100 text-[10px]"
+                    >
+                      Copier
+                    </button>
+                  </div>
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-indigo-700 font-semibold">{a.quota_gb} GB</span>
+                    <span className="text-gray-700">{a.prix_cfa > 0 ? a.prix_cfa.toLocaleString('fr-FR') + ' F' : '—'}</span>
+                  </div>
+                  <div className="flex gap-2 pt-1">
+                    <button
+                      onClick={() => setManualModal({
+                        agent_id: a.id,
+                        agent_label: `${a.prenom} ${a.nom}`,
+                        telephone: a.telephone,
+                        action: 'argent',
+                        statut: 'confirme',
+                        sms: tx?.airtel_message ?? '',
+                        montant_fcfa: a.prix_cfa,
+                      })}
+                      disabled={!canValidate}
+                      className="flex-1 text-xs font-medium py-2 rounded-lg bg-brand-50 text-brand-700 hover:bg-brand-100 disabled:opacity-50 transition-colors"
+                    >
+                      Valider (argent)
+                    </button>
+                    <button
+                      onClick={() => setManualModal({
+                        agent_id: a.id,
+                        agent_label: `${a.prenom} ${a.nom}`,
+                        telephone: a.telephone,
+                        action: 'forfait',
+                        statut: 'confirme',
+                        sms: tx?.airtel_message ?? '',
+                      })}
+                      disabled={!canValidate}
+                      className="flex-1 text-xs font-medium py-2 rounded-lg bg-amber-50 text-amber-800 hover:bg-amber-100 disabled:opacity-50 transition-colors"
+                    >
+                      Valider (forfait)
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </Card>
       )}
@@ -937,9 +1019,9 @@ export function CampagneDetailPage() {
               <Button variant="secondary" onClick={() => setManualModal(null)}>Annuler</Button>
               <Button
                 loading={manualMut.isPending}
-                disabled={!canLaunch}
+                disabled={!canValidate}
                 onClick={() => {
-                  if (!canLaunch) { toast.warning('Accès refusé', 'Droit "Lancer des campagnes" requis'); return; }
+                  if (!canValidate) { toast.warning('Accès refusé', 'Droit approvisionnement requis'); return; }
                   if (!manualModal.sms.trim()) { toast.warning('SMS requis', 'Collez le SMS complet pour preuve.'); return; }
                   manualMut.mutate({
                     agent_id: manualModal.agent_id,
@@ -1026,8 +1108,8 @@ export function NouvelleCampagnePage() {
   const navigate = useNavigate();
   const qc = useQueryClient();
   const toast = useToast();
-  const { isSuperAdmin, user, canProvision } = useAuth();
-  const canLaunch = isSuperAdmin || Boolean(user?.droits?.can_launch_campagne) || canProvision;
+  const { isSuperAdmin, user } = useAuth();
+  const canLaunch = isSuperAdmin || Boolean(user?.droits?.can_launch_campagne);
   const [qualityConfirm, setQualityConfirm] = useState<null | {
     phone_duplicates: number;
     invalid_phones: number;
@@ -1096,7 +1178,7 @@ export function NouvelleCampagnePage() {
         <Card>
           <div className="py-10 text-center">
             <p className="text-sm font-semibold text-gray-900">Accès refusé</p>
-            <p className="text-sm text-gray-500 mt-1">Tu n'as pas le droit "Lancer des campagnes".</p>
+            <p className="text-sm text-gray-500 mt-1">Tu n'as pas le droit de créer ou lancer des campagnes.</p>
           </div>
         </Card>
       </div>

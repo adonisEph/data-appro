@@ -20,6 +20,7 @@ import ComptePage from './pages/Compte';
 import PortalLogin from './pages/PortalLogin';
 import PortalStatus from './pages/PortalStatus';
 import CheckInsPage from './pages/CheckIns';
+import ReclamationsPage from './pages/Reclamations';
 import './index.css';
 
 
@@ -70,6 +71,7 @@ function App() {
                 <Route path="utilisateurs" element={<UtilisateursPage/>}/>
                 <Route path="roles-metier" element={<RolesMetierPage/>}/>
                 <Route path="check-ins" element={<CheckInsPage/>}/>
+                <Route path="reclamations" element={<ReclamationsPage/>}/>
                 {/* Routes lecteur accessibles aussi depuis le layout principal */}
                 <Route path="campagnes-viewer" element={<CampagnesLecteurPage/>}/>
                 <Route path="campagnes-viewer/:id" element={<CampagneDetailLecteurPage/>}/>
