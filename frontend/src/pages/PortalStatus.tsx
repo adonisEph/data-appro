@@ -122,8 +122,8 @@ export default function PortalStatus() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50">
       {/* Header */}
-      <div className="bg-gradient-to-r from-brand-600 via-indigo-600 to-indigo-700 text-white relative overflow-hidden">
-        <div className="absolute inset-0 opacity-10">
+      <div className="bg-gradient-to-r from-brand-600 via-indigo-600 to-indigo-700 text-white relative">
+        <div className="absolute inset-0 opacity-10 overflow-hidden pointer-events-none">
           <div className="absolute -top-8 -right-8 w-40 h-40 bg-white rounded-full blur-3xl"/>
           <div className="absolute -bottom-12 -left-12 w-48 h-48 bg-white rounded-full blur-3xl"/>
         </div>

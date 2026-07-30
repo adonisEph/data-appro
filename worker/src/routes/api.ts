@@ -1971,8 +1971,10 @@ portalRouter.post('/reclamation', async c => {
   return c.json({ ok: true });
 });
 
-// GET /portal/reclamations — SuperAdmin: liste des réclamations
-portalRouter.get('/reclamations', authMiddleware, superAdminMiddleware, async c => {
+// GET /portal/reclamations — SuperAdmin + Viewer: liste des réclamations
+portalRouter.get('/reclamations', authMiddleware, async c => {
+  const user = c.get('user') as JWTPayload;
+  if (!user?.is_super_admin && !user?.is_viewer) return c.json({ error: 'Accès refusé' }, 403);
   const statut = c.req.query('statut');
   let query = `SELECT r.*, a.nom, a.prenom, a.quota_gb, a.role_label
                FROM agent_reclamations r

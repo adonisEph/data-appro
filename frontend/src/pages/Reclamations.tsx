@@ -18,7 +18,7 @@ const STATUT_COLORS: Record<string, string> = {
 };
 
 export default function ReclamationsPage() {
-  const { isSuperAdmin } = useAuth();
+  const { isSuperAdmin, isViewer } = useAuth();
   const qc = useQueryClient();
   const [filter, setFilter] = useState('ouvert');
   const [selected, setSelected] = useState<number | null>(null);
@@ -27,7 +27,7 @@ export default function ReclamationsPage() {
   const { data, isLoading } = useQuery({
     queryKey: ['reclamations', filter],
     queryFn: () => portalApi.listReclamations(filter === 'all' ? undefined : filter),
-    enabled: isSuperAdmin,
+    enabled: isSuperAdmin || isViewer,
   });
 
   const respondMut = useMutation({
@@ -40,10 +40,10 @@ export default function ReclamationsPage() {
     },
   });
 
-  if (!isSuperAdmin) {
+  if (!isSuperAdmin && !isViewer) {
     return (
       <div className="p-6 max-w-3xl mx-auto">
-        <Card><div className="py-10 text-center text-sm text-gray-500">Accès réservé au SuperAdmin.</div></Card>
+        <Card><div className="py-10 text-center text-sm text-gray-500">Accès réservé au SuperAdmin et viewers.</div></Card>
       </div>
     );
   }
@@ -97,7 +97,7 @@ export default function ReclamationsPage() {
                     </div>
                   )}
                 </div>
-                {r.statut !== 'clôturé' && (
+                {r.statut !== 'clôturé' && isSuperAdmin && (
                   <Button size="sm" variant="secondary" onClick={() => { setSelected(r.id); setResponse(r.admin_response ?? ''); }}>
                     Répondre
                   </Button>
