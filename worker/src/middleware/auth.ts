@@ -47,7 +47,7 @@ export async function noViewerMiddleware(c: AppContext, next: Next) {
 }
 
 function hasPerm(user: JWTPayload | null | undefined, perm: keyof Pick<JWTPayload,
-  'can_import_agents' | 'can_launch_campagne' | 'can_view_historique' | 'can_manage_users'
+  'can_import_agents' | 'can_launch_campagne' | 'can_view_historique' | 'can_manage_users' | 'can_provision'
 >) {
   if (!user) return false;
   if (user.is_super_admin) return true;
@@ -69,6 +69,12 @@ export async function requireCanLaunchCampagne(c: AppContext, next: Next) {
 export async function requireCanViewHistorique(c: AppContext, next: Next) {
   const user = c.get('user') as JWTPayload;
   if (!hasPerm(user, 'can_view_historique')) return c.json({ error: 'Accès refusé — droit historique requis' }, 403);
+  return await next();
+}
+
+export async function requireCanProvision(c: AppContext, next: Next) {
+  const user = c.get('user') as JWTPayload;
+  if (!hasPerm(user, 'can_provision') && !hasPerm(user, 'can_launch_campagne')) return c.json({ error: 'Accès refusé — droit approvisionnement requis' }, 403);
   return await next();
 }
 

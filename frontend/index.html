@@ -9,7 +9,17 @@
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <meta name="apple-mobile-web-app-title" content="Data Appro" />
-    <link rel="manifest" href="/manifest.json" />
+    <link rel="manifest" href="/manifest.json" id="manifest-link" />
+    <script>
+      // Swap manifest based on path: portal agents get their own manifest
+      (function() {
+        var link = document.getElementById('manifest-link');
+        if (link) {
+          var isPortal = window.location.pathname.startsWith('/portal');
+          link.href = isPortal ? '/portal-manifest.json' : '/manifest.json';
+        }
+      })();
+    </script>
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="apple-touch-icon" href="/icon-192.svg" />
     <title>Data Appro — Airtel CG</title>

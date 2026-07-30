@@ -58,6 +58,7 @@ type UpdateUserPayload = {
   can_launch_campagne?: boolean;
   can_view_historique?: boolean;
   can_manage_users?: boolean;
+  can_provision?: boolean;
 };
 
 export const usersApi = {
@@ -67,6 +68,7 @@ export const usersApi = {
     is_viewer?: boolean;
     can_import_agents?: boolean; can_launch_campagne?: boolean;
     can_view_historique?: boolean; can_manage_users?: boolean;
+    can_provision?: boolean;
   }) => request<{ ok: boolean; user_id: number }>('/users', { method: 'POST', body: JSON.stringify(data) }),
   updateDroits: (id: number, data: UpdateUserPayload) =>
     request<{ ok: boolean }>(`/users/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
@@ -76,6 +78,19 @@ export const usersApi = {
     request<{ ok: boolean }>(`/users/${id}/reset-password`, { method: 'POST', body: JSON.stringify({ new_password }) }),
   forceLogout: (id: number) =>
     request<{ ok: boolean; had_active_session: boolean }>(`/users/${id}/force-logout`, { method: 'POST' }),
+};
+
+// Assistant assignments
+export const assistantAssignmentsApi = {
+  list: (assistantId: number) =>
+    request<{ assignments: Array<{ agent_id: number; assigned_by: number; created_at: string; nom: string; prenom: string; telephone: string; role: string; role_label: string | null; quota_gb: number; prix_cfa: number; actif: number }> }>(
+      `/assistant-assignments/${assistantId}`
+    ),
+  set: (assistantId: number, agent_ids: number[]) =>
+    request<{ ok: boolean; agent_ids: number[] }>(
+      `/assistant-assignments/${assistantId}`,
+      { method: 'PUT', body: JSON.stringify({ agent_ids }) }
+    ),
 };
 
 // Campagnes
@@ -191,5 +206,38 @@ export const trackedAgentsApi = {
     request<{ ok: true; agent_ids: number[] }>(
       '/tracked-agents',
       { method: 'PUT', body: JSON.stringify({ agent_ids }) }
+    ),
+};
+
+// Portail Agent (connexion par numéro)
+export const portalApi = {
+  login: (telephone: string) => {
+    return fetch(`${BASE}/portal/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ telephone }),
+    }).then(async res => {
+      const data = await res.json();
+      if (!res.ok) throw new Error((data as { error?: string }).error ?? 'Connexion échouée');
+      return data as { token: string; agent: { id: number; nom: string; prenom: string; telephone: string; quota_gb: number; role_label: string | null } };
+    });
+  },
+  status: (token: string) => {
+    return fetch(`${BASE}/portal/status`, {
+      headers: { 'Authorization': `Bearer ${token}` },
+    }).then(async res => {
+      const data = await res.json();
+      if (!res.ok) throw new Error((data as { error?: string }).error ?? 'Erreur');
+      return data as {
+        agent: { id: number; nom: string; prenom: string; telephone: string; quota_gb: number; role_label: string | null };
+        derniere_campagne: { id: number; mois: string; statut: string; option_envoi: string; lance_le: string | null; termine_le: string | null } | null;
+        transaction: { statut: string; option_used: string; montant_fcfa: number | null; airtel_message: string | null; airtel_reference: string | null; tente_le: string; confirme_le: string | null; nb_tentatives: number } | null;
+        historique_recent: Array<{ campagne_id: number; mois: string; statut: string; option_used: string; montant_fcfa: number | null; airtel_message: string | null; confirme_le: string | null }>;
+      };
+    });
+  },
+  checkIns: (limit?: number) =>
+    request<{ check_ins: Array<{ id: number; agent_id: number; telephone: string; ip_address: string | null; user_agent: string | null; created_at: string; nom: string; prenom: string; quota_gb: number; role_label: string | null }>; total: number }>(
+      `/portal/check-ins${limit ? `?limit=${limit}` : ''}`
     ),
 };

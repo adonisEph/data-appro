@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import type { Env, Role, JWTPayload } from '../types/index.js';
 import { MONTANTS_FCFA, ROLE_QUOTAS } from '../types/index.js';
-import { authMiddleware, superAdminMiddleware, noViewerMiddleware, requireCanImportAgents, requireCanLaunchCampagne, requireCanViewHistorique, generateJWT } from '../middleware/auth.js';
+import { authMiddleware, superAdminMiddleware, noViewerMiddleware, requireCanImportAgents, requireCanLaunchCampagne, requireCanViewHistorique, requireCanProvision, generateJWT } from '../middleware/auth.js';
 import { lancerCampagne } from '../services/provisionnement.js';
 
 type Variables = { user: JWTPayload };
@@ -169,7 +169,7 @@ api.post('/auth/login', async c => {
       `SELECT r.id, r.agent_id, r.email, r.password_hash,
               r.is_super_admin, r.is_viewer,
               r.can_import_agents, r.can_launch_campagne,
-              r.can_view_historique, r.can_manage_users,
+              r.can_view_historique, r.can_manage_users, r.can_provision,
               a.nom, a.prenom
        FROM responsables r JOIN agents a ON a.id = r.agent_id
        WHERE r.email = ? AND r.actif = 1`
@@ -178,6 +178,7 @@ api.post('/auth/login', async c => {
       is_super_admin: number; is_viewer: number;
       can_import_agents: number; can_launch_campagne: number;
       can_view_historique: number; can_manage_users: number;
+      can_provision: number;
       nom: string; prenom: string;
     }>();
 
@@ -198,6 +199,7 @@ api.post('/auth/login', async c => {
       can_launch_campagne: resp.can_launch_campagne === 1,
       can_view_historique: resp.can_view_historique === 1,
       can_manage_users: resp.can_manage_users === 1,
+      can_provision: resp.can_provision === 1,
     });
 
     try {
@@ -231,6 +233,7 @@ api.post('/auth/login', async c => {
           can_launch_campagne: resp.can_launch_campagne === 1,
           can_view_historique: resp.can_view_historique === 1,
           can_manage_users:    resp.can_manage_users === 1,
+          can_provision:       resp.can_provision === 1,
         }
       }
     });
@@ -1024,7 +1027,7 @@ usersRouter.use('*', authMiddleware, superAdminMiddleware);
 usersRouter.get('/', async c => {
   const { results } = await c.env.DB.prepare(
     `SELECT r.id, r.agent_id, r.email, r.is_super_admin, r.is_viewer,
-            r.can_import_agents, r.can_launch_campagne, r.can_view_historique, r.can_manage_users,
+            r.can_import_agents, r.can_launch_campagne, r.can_view_historique, r.can_manage_users, r.can_provision,
             r.actif, r.created_at, a.nom, a.prenom, a.telephone, a.role, a.role_label
      FROM responsables r JOIN agents a ON a.id = r.agent_id
      ORDER BY r.created_at DESC`
@@ -1038,6 +1041,7 @@ usersRouter.post('/', async c => {
     is_viewer?: boolean;
     can_import_agents?: boolean; can_launch_campagne?: boolean;
     can_view_historique?: boolean; can_manage_users?: boolean;
+    can_provision?: boolean;
   }>();
 
   const agentId = Number(body.agent_id);
@@ -1056,16 +1060,18 @@ usersRouter.post('/', async c => {
   if (existingUserForAgent) return c.json({ error: 'Cet agent est déjà un utilisateur' }, 409);
 
   const isViewer = body.is_viewer ? 1 : 0;
+  const isAssistant = body.can_provision ? 1 : 0;
   const tempInsert = await c.env.DB.prepare(
     `INSERT INTO responsables (agent_id, email, password_hash, is_viewer,
-       can_import_agents, can_launch_campagne, can_view_historique, can_manage_users)
-     VALUES (?, ?, 'temp', ?, ?, ?, ?, ?) RETURNING id`
+       can_import_agents, can_launch_campagne, can_view_historique, can_manage_users, can_provision)
+     VALUES (?, ?, 'temp', ?, ?, ?, ?, ?, ?) RETURNING id`
   ).bind(
     agentId, email, isViewer,
-    isViewer ? 0 : (body.can_import_agents   !== false ? 1 : 0),
-    isViewer ? 0 : (body.can_launch_campagne !== false ? 1 : 0),
+    isViewer ? 0 : (isAssistant ? 0 : (body.can_import_agents   !== false ? 1 : 0)),
+    isViewer ? 0 : (isAssistant ? 0 : (body.can_launch_campagne !== false ? 1 : 0)),
     1, // can_view_historique toujours activé
-    isViewer ? 0 : (body.can_manage_users    ? 1 : 0)
+    isViewer ? 0 : (isAssistant ? 0 : (body.can_manage_users    ? 1 : 0)),
+    isViewer ? 0 : (isAssistant ? 1 : 0)
   ).first<{ id: number }>();
 
   if (!tempInsert) return c.json({ error: 'Erreur création responsable' }, 500);
@@ -1087,6 +1093,7 @@ usersRouter.put('/:id', async c => {
     email?: string;
     can_import_agents?: boolean; can_launch_campagne?: boolean;
     can_view_historique?: boolean; can_manage_users?: boolean;
+    can_provision?: boolean;
     actif?: boolean; is_viewer?: boolean;
   }>();
   const updates: string[] = []; const values: unknown[] = [];
@@ -1102,6 +1109,7 @@ usersRouter.put('/:id', async c => {
   if (body.can_launch_campagne !== undefined) { updates.push('can_launch_campagne = ?'); values.push(body.can_launch_campagne ? 1 : 0); }
   if (body.can_view_historique !== undefined) { updates.push('can_view_historique = ?'); values.push(body.can_view_historique ? 1 : 0); }
   if (body.can_manage_users    !== undefined) { updates.push('can_manage_users = ?');    values.push(body.can_manage_users    ? 1 : 0); }
+  if (body.can_provision       !== undefined) { updates.push('can_provision = ?');       values.push(body.can_provision       ? 1 : 0); }
   if (body.actif               !== undefined) { updates.push('actif = ?');               values.push(body.actif               ? 1 : 0); }
   if (body.is_viewer           !== undefined) { updates.push('is_viewer = ?');           values.push(body.is_viewer           ? 1 : 0); }
   if (!updates.length) return c.json({ error: 'Rien à modifier' }, 400);
@@ -1149,6 +1157,75 @@ usersRouter.post('/:id/reset-password', async c => {
 api.route('/users', usersRouter);
 
 // ══════════════════════════════════════════════════════════
+// ASSISTANT ASSIGNMENTS — Super Admin assigne des agents à un assistant-appro
+// ══════════════════════════════════════════════════════════
+async function fetchAssistantAgentIdSet(db: Env['DB'], assistantResponsableId: number): Promise<Set<number>> {
+  const { results } = await db.prepare(
+    `SELECT DISTINCT agent_id FROM assistant_assignments WHERE assistant_responsable_id = ?`
+  ).bind(assistantResponsableId).all<{ agent_id: number }>();
+  return new Set<number>((results ?? []).map(r => Number(r.agent_id)).filter(n => Number.isFinite(n) && n > 0));
+}
+
+const assistantAssignmentsRouter = new Hono<AppEnv>();
+assistantAssignmentsRouter.use('*', authMiddleware);
+
+// GET /assistant-assignments/:assistantId — liste les agents assignés à un assistant
+assistantAssignmentsRouter.get('/:assistantId', async c => {
+  const user = c.get('user') as JWTPayload;
+  const assistantId = Number(c.req.param('assistantId'));
+
+  // Un assistant peut voir ses propres assignations, un super admin peut voir celles de n'importe qui
+  if (!user?.is_super_admin && Number(user.sub) !== assistantId) {
+    return c.json({ error: 'Accès refusé' }, 403);
+  }
+
+  const { results } = await c.env.DB.prepare(
+    `SELECT aa.agent_id, aa.assigned_by, aa.created_at,
+            a.nom, a.prenom, a.telephone, a.role, a.role_label, a.quota_gb, a.prix_cfa, a.actif
+     FROM assistant_assignments aa
+     JOIN agents a ON a.id = aa.agent_id
+     WHERE aa.assistant_responsable_id = ?
+     ORDER BY a.prenom ASC, a.nom ASC`
+  ).bind(assistantId).all();
+
+  return c.json({ assignments: results ?? [] });
+});
+
+// PUT /assistant-assignments/:assistantId — super admin définit la liste d'agents assignés
+assistantAssignmentsRouter.put('/:assistantId', superAdminMiddleware, async c => {
+  const assistantId = Number(c.req.param('assistantId'));
+  if (!Number.isFinite(assistantId) || assistantId <= 0) return c.json({ error: 'assistantId invalide' }, 400);
+
+  const superadminId = Number(c.get('user')?.sub);
+  const { agent_ids } = await c.req.json<{ agent_ids: number[] }>();
+  if (!Array.isArray(agent_ids)) return c.json({ error: 'agent_ids requis (tableau)' }, 400);
+
+  // Vérifier que l'assistant existe et a can_provision
+  const assistant = await c.env.DB.prepare(
+    `SELECT id FROM responsables WHERE id = ? AND can_provision = 1`
+  ).bind(assistantId).first<{ id: number }>();
+  if (!assistant) return c.json({ error: 'Assistant introuvable ou sans droit can_provision' }, 404);
+
+  // Remplacer toutes les assignations
+  await c.env.DB.prepare(`DELETE FROM assistant_assignments WHERE assistant_responsable_id = ?`).bind(assistantId).run();
+  for (const agentId of agent_ids) {
+    await c.env.DB.prepare(
+      `INSERT OR IGNORE INTO assistant_assignments (assistant_responsable_id, agent_id, assigned_by) VALUES (?, ?, ?)`
+    ).bind(assistantId, agentId, superadminId).run();
+  }
+
+  await c.env.DB.prepare(`INSERT INTO audit_logs (responsable_id, action, details) VALUES (?, ?, ?)`).bind(
+    superadminId,
+    'ASSISTANT_ASSIGNMENTS_UPDATED',
+    JSON.stringify({ assistant_id: assistantId, agent_ids, count: agent_ids.length })
+  ).run();
+
+  return c.json({ ok: true, agent_ids });
+});
+
+api.route('/assistant-assignments', assistantAssignmentsRouter);
+
+// ══════════════════════════════════════════════════════════
 // CAMPAGNES
 // ══════════════════════════════════════════════════════════
 const campagnesRouter = new Hono<AppEnv>();
@@ -1181,7 +1258,9 @@ campagnesRouter.get('/', async c => {
 campagnesRouter.get('/:id/eligible-agents', async c => {
   const user = c.get('user') as JWTPayload;
   const isSuperAdmin = Boolean(user?.is_super_admin);
-  const trackedSet = !isSuperAdmin ? await fetchTrackedAgentIdSet(c.env.DB) : new Set<number>();
+  const isAssistant = Boolean(user?.can_provision) && !isSuperAdmin;
+  const trackedSet = !isSuperAdmin && !isAssistant ? await fetchTrackedAgentIdSet(c.env.DB) : new Set<number>();
+  const assistantSet = isAssistant ? await fetchAssistantAgentIdSet(c.env.DB, Number(user.sub)) : new Set<number>();
   const id = Number(c.req.param('id'));
   const campagne = await c.env.DB.prepare(`SELECT lance_le, created_at FROM campagnes WHERE id = ?`).bind(id).first<{ lance_le: string | null; created_at: string }>();
   if (!campagne) return c.json({ error: 'Campagne introuvable' }, 404);
@@ -1212,9 +1291,14 @@ campagnesRouter.get('/:id/eligible-agents', async c => {
   ).bind(cutoff).all();
 
   const agentsAll = results ?? [];
-  const agents = isSuperAdmin
-    ? agentsAll
-    : agentsAll.filter(a => !isTrackedAgentId(trackedSet, (a as { id?: unknown }).id));
+  let agents: typeof agentsAll;
+  if (isSuperAdmin) {
+    agents = agentsAll;
+  } else if (isAssistant) {
+    agents = agentsAll.filter(a => assistantSet.has(Number((a as { id?: unknown }).id)));
+  } else {
+    agents = agentsAll.filter(a => !isTrackedAgentId(trackedSet, (a as { id?: unknown }).id));
+  }
 
   return c.json({
     agents,
@@ -1282,7 +1366,9 @@ campagnesRouter.post('/', noViewerMiddleware, requireCanLaunchCampagne, async c 
 campagnesRouter.get('/:id', async c => {
   const user = c.get('user') as JWTPayload;
   const isSuperAdmin = Boolean(user?.is_super_admin);
-  const trackedSet = !isSuperAdmin ? await fetchTrackedAgentIdSet(c.env.DB) : new Set<number>();
+  const isAssistant = Boolean(user?.can_provision) && !isSuperAdmin;
+  const trackedSet = !isSuperAdmin && !isAssistant ? await fetchTrackedAgentIdSet(c.env.DB) : new Set<number>();
+  const assistantSet = isAssistant ? await fetchAssistantAgentIdSet(c.env.DB, Number(user.sub)) : new Set<number>();
 
   const id = Number(c.req.param('id'));
   const campagne = await c.env.DB.prepare(`SELECT * FROM campagnes WHERE id = ?`).bind(id).first();
@@ -1386,9 +1472,14 @@ campagnesRouter.get('/:id', async c => {
   ).bind(id, isSuperAdmin ? 1 : 0).all<Record<string, unknown>>();
 
   const transactionsAll = transactionsRaw ?? [];
-  const transactions = isSuperAdmin
-    ? transactionsAll
-    : transactionsAll.filter(tx => !isTrackedAgentId(trackedSet, (tx as { agent_id?: unknown }).agent_id));
+  let transactions: typeof transactionsAll;
+  if (isSuperAdmin) {
+    transactions = transactionsAll;
+  } else if (isAssistant) {
+    transactions = transactionsAll.filter(tx => assistantSet.has(Number((tx as { agent_id?: unknown }).agent_id)));
+  } else {
+    transactions = transactionsAll.filter(tx => !isTrackedAgentId(trackedSet, (tx as { agent_id?: unknown }).agent_id));
+  }
 
   const metrics = await c.env.DB.prepare(
     `SELECT
@@ -1433,7 +1524,7 @@ campagnesRouter.post('/:id/lancer', noViewerMiddleware, requireCanLaunchCampagne
   return c.json({ ok: true, message: `Provisionnement lancé pour ${agents.length} agent(s)`, mode: body.agent_ids ? 'test_ciblé' : 'tous_agents' });
 });
 
-campagnesRouter.post('/:id/manual/validate', noViewerMiddleware, requireCanLaunchCampagne, async c => {
+campagnesRouter.post('/:id/manual/validate', noViewerMiddleware, requireCanProvision, async c => {
   const campagneId = Number(c.req.param('id'));
   const user = c.get('user');
   const body = await c.req.json<{
@@ -1595,7 +1686,9 @@ historiqueRouter.get('/transactions', async c => {
   const { agent_id, campagne_id, statut, telephone, mois } = c.req.query();
   const user = c.get('user');
   const isSuperAdmin = Boolean((user as JWTPayload | undefined)?.is_super_admin);
-  const trackedSet = !isSuperAdmin ? await fetchTrackedAgentIdSet(c.env.DB) : new Set<number>();
+  const isAssistant = Boolean((user as JWTPayload | undefined)?.can_provision) && !isSuperAdmin;
+  const trackedSet = !isSuperAdmin && !isAssistant ? await fetchTrackedAgentIdSet(c.env.DB) : new Set<number>();
+  const assistantSet = isAssistant ? await fetchAssistantAgentIdSet(c.env.DB, Number(user?.sub)) : new Set<number>();
   let query = `SELECT t.*, a.nom, a.prenom, a.role, a.role_label, a.prix_cfa, c.mois
                FROM transactions t JOIN agents a ON a.id = t.agent_id JOIN campagnes c ON c.id = t.campagne_id WHERE 1=1`;
   const params: unknown[] = [];
@@ -1614,9 +1707,14 @@ historiqueRouter.get('/transactions', async c => {
   query += ' ORDER BY t.id DESC LIMIT 500';
   const { results } = await c.env.DB.prepare(query).bind(...params).all();
   const transactionsAll = results ?? [];
-  const transactions = isSuperAdmin
-    ? transactionsAll
-    : transactionsAll.filter(tx => !isTrackedAgentId(trackedSet, (tx as { agent_id?: unknown }).agent_id));
+  let transactions: typeof transactionsAll;
+  if (isSuperAdmin) {
+    transactions = transactionsAll;
+  } else if (isAssistant) {
+    transactions = transactionsAll.filter(tx => assistantSet.has(Number((tx as { agent_id?: unknown }).agent_id)));
+  } else {
+    transactions = transactionsAll.filter(tx => !isTrackedAgentId(trackedSet, (tx as { agent_id?: unknown }).agent_id));
+  }
   return c.json({ transactions, total: transactions.length });
 });
 
@@ -1624,14 +1722,20 @@ historiqueRouter.get('/transactions/:id/preuve', async c => {
   const id = Number(c.req.param('id'));
   const user = c.get('user');
   const isSuperAdmin = Boolean((user as JWTPayload | undefined)?.is_super_admin);
-  const trackedSet = !isSuperAdmin ? await fetchTrackedAgentIdSet(c.env.DB) : new Set<number>();
+  const isAssistant = Boolean((user as JWTPayload | undefined)?.can_provision) && !isSuperAdmin;
+  const trackedSet = !isSuperAdmin && !isAssistant ? await fetchTrackedAgentIdSet(c.env.DB) : new Set<number>();
+  const assistantSet = isAssistant ? await fetchAssistantAgentIdSet(c.env.DB, Number(user?.sub)) : new Set<number>();
   const tx = await c.env.DB.prepare(
     `SELECT t.*, a.nom, a.prenom, a.telephone as agent_tel, a.role, a.role_label, a.prix_cfa, c.mois, c.budget_fcfa, c.compte_source
      FROM transactions t JOIN agents a ON a.id = t.agent_id JOIN campagnes c ON c.id = t.campagne_id WHERE t.id = ?`
   ).bind(id).first();
   if (!tx) return c.json({ error: 'Transaction introuvable' }, 404);
 
-  if (!isSuperAdmin && isTrackedAgentId(trackedSet, (tx as { agent_id?: unknown }).agent_id)) {
+  if (isAssistant) {
+    if (!assistantSet.has(Number((tx as { agent_id?: unknown }).agent_id))) {
+      return c.json({ error: 'Transaction introuvable' }, 404);
+    }
+  } else if (!isSuperAdmin && isTrackedAgentId(trackedSet, (tx as { agent_id?: unknown }).agent_id)) {
     return c.json({ error: 'Transaction introuvable' }, 404);
   }
 
@@ -1662,6 +1766,151 @@ historiqueRouter.get('/stats', async c => {
 });
 
 api.route('/historique', historiqueRouter);
+
+// ══════════════════════════════════════════════════════════
+// PORTAIL AGENT — consultation par numéro de téléphone
+// ══════════════════════════════════════════════════════════
+const portalRouter = new Hono<AppEnv>();
+
+// Normaliser un numéro de téléphone (chiffres uniquement)
+function normalizePhone(raw: string): string {
+  return raw.replace(/\D/g, '').trim();
+}
+
+// POST /portal/login — authentification par numéro uniquement
+portalRouter.post('/login', async c => {
+  const { telephone } = await c.req.json<{ telephone: string }>();
+  if (!telephone) return c.json({ error: 'Numéro de téléphone requis' }, 400);
+
+  const normalizedTel = normalizePhone(telephone);
+  if (!normalizedTel) return c.json({ error: 'Numéro invalide' }, 400);
+
+  // Chercher l'agent par numéro (fin du numéro pour tolérer préfixes pays)
+  const agent = await c.env.DB.prepare(
+    `SELECT id, nom, prenom, telephone, quota_gb, role_label, actif
+     FROM agents WHERE REPLACE(REPLACE(REPLACE(REPLACE(telephone, ' ', ''), '-', ''), '+', ''), '.', '') LIKE ?`
+  ).bind(`%${normalizedTel}`).first<{ id: number; nom: string; prenom: string; telephone: string; quota_gb: number; role_label: string | null; actif: number }>();
+
+  if (!agent) return c.json({ error: 'Numéro introuvable dans la flotte. Vérifiez votre numéro.' }, 404);
+  if (!agent.actif) return c.json({ error: 'Votre compte est inactif. Contactez un responsable.' }, 403);
+
+  // Enregistrer la connexion
+  const ip = c.req.header('CF-Connecting-IP') ?? c.req.header('X-Forwarded-For') ?? null;
+  const ua = c.req.header('User-Agent') ?? null;
+  await c.env.DB.prepare(
+    `INSERT INTO agent_portal_logins (agent_id, telephone, ip_address, user_agent) VALUES (?, ?, ?, ?)`
+  ).bind(agent.id, agent.telephone, ip, ua).run();
+
+  // Générer un JWT simple pour l'agent (valide 24h)
+  const token = await generateJWT(c.env.JWT_SECRET, {
+    sub: `agent:${agent.id}`,
+    email: '',
+    agent_id: agent.id,
+    is_super_admin: false,
+    is_viewer: false,
+    can_import_agents: false,
+    can_launch_campagne: false,
+    can_view_historique: false,
+    can_manage_users: false,
+    can_provision: false,
+  });
+
+  return c.json({
+    token,
+    agent: {
+      id: agent.id,
+      nom: agent.nom,
+      prenom: agent.prenom,
+      telephone: agent.telephone,
+      quota_gb: agent.quota_gb,
+      role_label: agent.role_label,
+    },
+  });
+});
+
+// GET /portal/status — statut de l'agent pour la dernière campagne
+portalRouter.get('/status', async c => {
+  const auth = c.req.header('Authorization');
+  if (!auth?.startsWith('Bearer ')) return c.json({ error: 'Non autorisé' }, 401);
+
+  const token = auth.slice(7);
+  let agentId: number;
+  try {
+    const [header, payload, signature] = token.split('.');
+    if (!header || !payload || !signature) throw new Error('Token malformé');
+    const encoder = new TextEncoder();
+    const key = await crypto.subtle.importKey('raw', encoder.encode(c.env.JWT_SECRET), { name: 'HMAC', hash: 'SHA-256' }, false, ['verify']);
+    const data = encoder.encode(`${header}.${payload}`);
+    const sig = Uint8Array.from(atob(signature.replace(/-/g, '+').replace(/_/g, '/')), ch => ch.charCodeAt(0));
+    const valid = await crypto.subtle.verify('HMAC', key, sig, data);
+    if (!valid) throw new Error('Signature invalide');
+    const decoded = JSON.parse(atob(payload)) as JWTPayload;
+    if (decoded.exp < Math.floor(Date.now() / 1000)) return c.json({ error: 'Session expirée' }, 401);
+    if (!decoded.sub.startsWith('agent:')) return c.json({ error: 'Token invalide' }, 403);
+    agentId = decoded.agent_id;
+  } catch {
+    return c.json({ error: 'Token invalide' }, 401);
+  }
+
+  // Infos agent
+  const agent = await c.env.DB.prepare(
+    `SELECT id, nom, prenom, telephone, quota_gb, role_label, actif FROM agents WHERE id = ?`
+  ).bind(agentId).first<{ id: number; nom: string; prenom: string; telephone: string; quota_gb: number; role_label: string | null; actif: number }>();
+  if (!agent) return c.json({ error: 'Agent introuvable' }, 404);
+
+  // Dernière campagne (la plus récente)
+  const lastCampagne = await c.env.DB.prepare(
+    `SELECT c.id, c.mois, c.statut, c.option_envoi, c.lance_le, c.termine_le
+     FROM campagnes c ORDER BY c.id DESC LIMIT 1`
+  ).first<{ id: number; mois: string; statut: string; option_envoi: string; lance_le: string | null; termine_le: string | null }>();
+
+  // Transaction de cet agent pour la dernière campagne
+  let transaction: Record<string, unknown> | null = null;
+  if (lastCampagne) {
+    transaction = await c.env.DB.prepare(
+      `SELECT t.statut, t.option_used, t.montant_fcfa, t.airtel_message, t.airtel_reference,
+              t.tente_le, t.confirme_le, t.nb_tentatives
+       FROM transactions t WHERE t.campagne_id = ? AND t.agent_id = ? LIMIT 1`
+    ).bind(lastCampagne.id, agentId).first();
+  }
+
+  // Historique récent (5 dernières campagnes)
+  const { results: recentTx } = await c.env.DB.prepare(
+    `SELECT t.campagne_id, c.mois, t.statut, t.option_used, t.montant_fcfa, t.airtel_message, t.confirme_le
+     FROM transactions t JOIN campagnes c ON c.id = t.campagne_id
+     WHERE t.agent_id = ? ORDER BY t.campagne_id DESC LIMIT 5`
+  ).bind(agentId).all();
+
+  return c.json({
+    agent: {
+      id: agent.id,
+      nom: agent.nom,
+      prenom: agent.prenom,
+      telephone: agent.telephone,
+      quota_gb: agent.quota_gb,
+      role_label: agent.role_label,
+    },
+    derniere_campagne: lastCampagne ?? null,
+    transaction: transaction ?? null,
+    historique_recent: recentTx ?? [],
+  });
+});
+
+// GET /portal/check-ins — SuperAdmin: liste des connexions agents récentes
+portalRouter.get('/check-ins', authMiddleware, superAdminMiddleware, async c => {
+  const limit = Math.min(Number(c.req.query('limit') ?? 100), 500);
+  const { results } = await c.env.DB.prepare(
+    `SELECT apl.id, apl.agent_id, apl.telephone, apl.ip_address, apl.user_agent, apl.created_at,
+            a.nom, a.prenom, a.quota_gb, a.role_label
+     FROM agent_portal_logins apl
+     LEFT JOIN agents a ON a.id = apl.agent_id
+     ORDER BY apl.created_at DESC LIMIT ?`
+  ).bind(limit).all();
+
+  return c.json({ check_ins: results ?? [], total: results?.length ?? 0 });
+});
+
+api.route('/portal', portalRouter);
 
 // ══════════════════════════════════════════════════════════
 // RELANCE + EXPORT CSV

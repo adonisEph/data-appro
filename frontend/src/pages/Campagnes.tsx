@@ -22,8 +22,8 @@ import { ROLE_QUOTAS } from '../types';
 export function CampagnesPage() {
   const qc = useQueryClient();
   const toast = useToast();
-  const { isSuperAdmin, user } = useAuth();
-  const canLaunch = isSuperAdmin || Boolean(user?.droits?.can_launch_campagne);
+  const { isSuperAdmin, user, canProvision } = useAuth();
+  const canLaunch = isSuperAdmin || Boolean(user?.droits?.can_launch_campagne) || canProvision;
   const [deleteCampagne, setDeleteCampagne] = useState<import('../types').Campagne | null>(null);
 
   useQuery({
@@ -189,8 +189,8 @@ export function CampagneDetailPage() {
   const qc = useQueryClient();
   const toast = useToast();
   const navigate = useNavigate();
-  const { isSuperAdmin, user } = useAuth();
-  const canLaunch = isSuperAdmin || Boolean(user?.droits?.can_launch_campagne);
+  const { isSuperAdmin, user, canProvision } = useAuth();
+  const canLaunch = isSuperAdmin || Boolean(user?.droits?.can_launch_campagne) || canProvision;
   const [filterStatut, setFilterStatut] = useState('');
   const [search, setSearch] = useState('');
   const [confirmLancer, setConfirmLancer] = useState(false);
@@ -839,20 +839,41 @@ export function CampagneDetailPage() {
             <div>
               <label className="block text-xs font-medium text-gray-700 mb-1">SMS complet (preuve) *</label>
               <div className="flex items-center justify-between gap-3 mb-2">
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  loading={smsSuggestMut.isPending}
-                  onClick={() => {
-                    smsSuggestMut.mutate({
-                      telephone: manualModal.telephone,
-                      action: manualModal.action,
-                      montant_fcfa: manualModal.montant_fcfa ?? undefined,
-                    });
-                  }}
-                >
-                  Récupérer SMS Airtel
-                </Button>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    loading={smsSuggestMut.isPending}
+                    onClick={() => {
+                      smsSuggestMut.mutate({
+                        telephone: manualModal.telephone,
+                        action: manualModal.action,
+                        montant_fcfa: manualModal.montant_fcfa ?? undefined,
+                      });
+                    }}
+                  >
+                    Récupérer SMS Airtel
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={async () => {
+                      try {
+                        const text = await navigator.clipboard.readText();
+                        if (text && text.trim()) {
+                          setManualModal(m => m ? ({ ...m, sms: text.trim() }) : m);
+                          toast.success('Presse-papier collé', 'SMS pré-rempli depuis le presse-papier');
+                        } else {
+                          toast.warning('Presse-papier vide', 'Aucun texte trouvé dans le presse-papier');
+                        }
+                      } catch {
+                        toast.error('Presse-papier', 'Accès refusé ou non disponible. Copiez le SMS manuellement puis collez-le dans la zone de texte.');
+                      }
+                    }}
+                  >
+                    Coller le presse-papier
+                  </Button>
+                </div>
                 <span className="text-xs text-gray-400">Préremplissage auto depuis le téléphone</span>
               </div>
               <textarea
@@ -1005,8 +1026,8 @@ export function NouvelleCampagnePage() {
   const navigate = useNavigate();
   const qc = useQueryClient();
   const toast = useToast();
-  const { isSuperAdmin, user } = useAuth();
-  const canLaunch = isSuperAdmin || Boolean(user?.droits?.can_launch_campagne);
+  const { isSuperAdmin, user, canProvision } = useAuth();
+  const canLaunch = isSuperAdmin || Boolean(user?.droits?.can_launch_campagne) || canProvision;
   const [qualityConfirm, setQualityConfirm] = useState<null | {
     phone_duplicates: number;
     invalid_phones: number;

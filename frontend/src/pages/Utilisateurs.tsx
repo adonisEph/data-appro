@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { agentsApi, usersApi } from '../lib/api';
+import { agentsApi, usersApi, assistantAssignmentsApi } from '../lib/api';
 import { useToast } from '../components/ui/Toast';
 import { ConfirmModal } from '../components/ui/ConfirmModal';
 import { Card, Button, RoleBadge, Modal, Spinner, EmptyState } from '../components/ui';
@@ -35,6 +35,7 @@ export default function UtilisateursPage() {
     email: '',
     password: '',
     is_viewer: false,
+    can_provision: false,
     can_import_agents: true,
     can_launch_campagne: true,
     can_view_historique: true,
@@ -45,6 +46,9 @@ export default function UtilisateursPage() {
 
   const [droits, setDroits] = useState<Record<string, boolean>>({});
   const [editIsViewer, setEditIsViewer] = useState(false);
+  const [editIsAssistant, setEditIsAssistant] = useState(false);
+  const [assignUser, setAssignUser] = useState<Responsable | null>(null);
+  const [assignedAgentIds, setAssignedAgentIds] = useState<number[]>([]);
 
   const { data, isLoading } = useQuery({ queryKey: ['users'], queryFn: usersApi.list, refetchOnWindowFocus: true, staleTime: 0 });
 
@@ -68,6 +72,7 @@ export default function UtilisateursPage() {
         agent_id: 0,
         email: '',
         password: '',
+        can_provision: false,
         can_import_agents: true,
         can_launch_campagne: true,
         can_view_historique: true,
@@ -136,9 +141,32 @@ export default function UtilisateursPage() {
       can_manage_users:    u.can_manage_users,
     });
     setEditIsViewer(Boolean(u.is_viewer));
+    setEditIsAssistant(Boolean(u.can_provision) && !Boolean(u.is_super_admin) && !Boolean(u.is_viewer));
     setEditEmail(String(u.email ?? ''));
     setEditUser(u);
   };
+
+  const openAssign = async (u: Responsable) => {
+    setAssignUser(u);
+    setAssignedAgentIds([]);
+    try {
+      const res = await assistantAssignmentsApi.list(u.id);
+      setAssignedAgentIds((res.assignments ?? []).map(a => a.agent_id));
+    } catch {
+      // ignore
+    }
+  };
+
+  const assignMut = useMutation({
+    mutationFn: ({ assistantId, agentIds }: { assistantId: number; agentIds: number[] }) =>
+      assistantAssignmentsApi.set(assistantId, agentIds),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['users'] });
+      toast.success('Assignations mises à jour');
+      setAssignUser(null);
+    },
+    onError: (err: Error) => toast.error('Erreur', err.message),
+  });
 
   const users = data?.users ?? [];
 
@@ -209,6 +237,7 @@ export default function UtilisateursPage() {
                               {isMe && <span className="ml-2 text-xs bg-brand-100 text-brand-700 px-2 py-0.5 rounded-full">Vous</span>}
                               {u.is_super_admin && <span className="ml-2 text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full">Super Admin</span>}
                               {u.is_viewer && <span className="ml-2 text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">Lecteur</span>}
+                              {u.can_provision && !u.is_super_admin && !u.is_viewer && <span className="ml-2 text-xs bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded-full">Assistant-Appro</span>}
                             </p>
                             <p className="text-xs text-gray-500">{u.email}</p>
                           </div>
@@ -260,6 +289,12 @@ export default function UtilisateursPage() {
                               className="text-brand-600 hover:text-brand-800 text-xs font-medium px-2 py-1 rounded hover:bg-brand-50">
                               Droits
                             </button>
+                            {u.can_provision && !u.is_super_admin && !u.is_viewer && (
+                              <button onClick={() => openAssign(u)}
+                                className="text-indigo-600 hover:text-indigo-800 text-xs font-medium px-2 py-1 rounded hover:bg-indigo-50">
+                                Assigner
+                              </button>
+                            )}
                             <button onClick={() => setForceLogoutUser(u)}
                               className="text-gray-500 hover:text-gray-700 text-xs font-medium px-2 py-1 rounded hover:bg-gray-100">
                               Déconnecter
@@ -337,19 +372,24 @@ export default function UtilisateursPage() {
           </div>
           <div>
             <label className="block text-xs font-medium text-gray-700 mb-2">Type d'accès</label>
-            <div className="grid grid-cols-2 gap-2 mb-3">
-              <button type="button" onClick={() => setForm(f => ({ ...f, is_viewer: false }))}
-                className={`p-3 rounded-xl border-2 text-left transition-all ${!form.is_viewer ? 'border-brand-500 bg-brand-50' : 'border-gray-200'}`}>
-                <p className={`text-xs font-semibold ${!form.is_viewer ? 'text-brand-700' : 'text-gray-700'}`}>Responsable</p>
+            <div className="grid grid-cols-3 gap-2 mb-3">
+              <button type="button" onClick={() => setForm(f => ({ ...f, is_viewer: false, can_provision: false }))}
+                className={`p-3 rounded-xl border-2 text-left transition-all ${!form.is_viewer && !form.can_provision ? 'border-brand-500 bg-brand-50' : 'border-gray-200'}`}>
+                <p className={`text-xs font-semibold ${!form.is_viewer && !form.can_provision ? 'text-brand-700' : 'text-gray-700'}`}>Responsable</p>
                 <p className="text-xs text-gray-500 mt-0.5">Accès aux actions</p>
               </button>
-              <button type="button" onClick={() => setForm(f => ({ ...f, is_viewer: true }))}
+              <button type="button" onClick={() => setForm(f => ({ ...f, is_viewer: false, can_provision: true }))}
+                className={`p-3 rounded-xl border-2 text-left transition-all ${form.can_provision ? 'border-indigo-500 bg-indigo-50' : 'border-gray-200'}`}>
+                <p className={`text-xs font-semibold ${form.can_provision ? 'text-indigo-700' : 'text-gray-700'}`}>Assistant-Appro</p>
+                <p className="text-xs text-gray-500 mt-0.5">Approvisionnement</p>
+              </button>
+              <button type="button" onClick={() => setForm(f => ({ ...f, is_viewer: true, can_provision: false }))}
                 className={`p-3 rounded-xl border-2 text-left transition-all ${form.is_viewer ? 'border-gray-500 bg-gray-50' : 'border-gray-200'}`}>
                 <p className={`text-xs font-semibold ${form.is_viewer ? 'text-gray-700' : 'text-gray-700'}`}>Lecteur</p>
                 <p className="text-xs text-gray-500 mt-0.5">Consultation seule</p>
               </button>
             </div>
-            {!form.is_viewer && (
+            {!form.is_viewer && !form.can_provision && (
               <div className="space-y-2">
                 {Object.entries(DROITS_LABELS).map(([key, label]) => (
                   <label key={key} className="flex items-center gap-3 cursor-pointer">
@@ -361,6 +401,11 @@ export default function UtilisateursPage() {
                   </label>
                 ))}
               </div>
+            )}
+            {form.can_provision && (
+              <p className="text-xs text-indigo-600 bg-indigo-50 rounded-lg px-3 py-2">
+                L'assistant-appro peut approvisionner les agents que vous lui assignez (Campagne, Historique, Mon Compte uniquement). Après création, cliquez sur « Assigner » pour sélectionner les agents.
+              </p>
             )}
             {form.is_viewer && (
               <p className="text-xs text-gray-500 bg-gray-50 rounded-lg px-3 py-2">
@@ -400,17 +445,27 @@ export default function UtilisateursPage() {
             <input
               type="checkbox"
               checked={editIsViewer}
-              onChange={e => setEditIsViewer(e.target.checked)}
+              onChange={e => { setEditIsViewer(e.target.checked); if (e.target.checked) setEditIsAssistant(false); }}
               className="w-4 h-4 text-brand-600 rounded"
             />
             <span className="text-sm text-gray-700 font-medium">Compte lecteur (consultation seule)</span>
+          </label>
+
+          <label className="flex items-center gap-3 p-3 rounded-lg border border-gray-200 cursor-pointer hover:bg-gray-50">
+            <input
+              type="checkbox"
+              checked={editIsAssistant}
+              onChange={e => { setEditIsAssistant(e.target.checked); if (e.target.checked) setEditIsViewer(false); }}
+              className="w-4 h-4 text-brand-600 rounded"
+            />
+            <span className="text-sm text-gray-700 font-medium">Assistant-Appro (approvisionnement restreint)</span>
           </label>
 
           {Object.entries(DROITS_LABELS).map(([key, label]) => (
             <label key={key} className="flex items-center gap-3 p-3 rounded-lg border border-gray-200 cursor-pointer hover:bg-gray-50">
               <input type="checkbox" checked={droits[key] ?? false}
                 onChange={e => setDroits(d => ({ ...d, [key]: e.target.checked }))}
-                disabled={editIsViewer}
+                disabled={editIsViewer || editIsAssistant}
                 className="w-4 h-4 text-brand-600 rounded"/>
               <span className="text-sm text-gray-700 font-medium">{label}</span>
             </label>
@@ -419,6 +474,12 @@ export default function UtilisateursPage() {
           {editIsViewer && (
             <p className="text-xs text-gray-500 bg-gray-50 rounded-lg px-3 py-2">
               Ce compte est en mode <strong>Lecteur</strong>. Les droits d'action sont désactivés.
+            </p>
+          )}
+
+          {editIsAssistant && (
+            <p className="text-xs text-indigo-600 bg-indigo-50 rounded-lg px-3 py-2">
+              Ce compte est en mode <strong>Assistant-Appro</strong>. Accès limité à Campagne, Historique et Mon Compte. Utilisez le bouton « Assigner » pour sélectionner les agents à approvisionner.
             </p>
           )}
 
@@ -434,6 +495,22 @@ export default function UtilisateursPage() {
                     data: {
                       ...(emailChanged ? { email: editEmail.trim() } : {}),
                       is_viewer: true,
+                      can_provision: false,
+                      can_import_agents: false,
+                      can_launch_campagne: false,
+                      can_view_historique: true,
+                      can_manage_users: false,
+                    },
+                  });
+                  return;
+                }
+                if (editIsAssistant) {
+                  updateMut.mutate({
+                    id: editUser.id,
+                    data: {
+                      ...(emailChanged ? { email: editEmail.trim() } : {}),
+                      is_viewer: false,
+                      can_provision: true,
                       can_import_agents: false,
                       can_launch_campagne: false,
                       can_view_historique: true,
@@ -444,10 +521,109 @@ export default function UtilisateursPage() {
                 }
                 updateMut.mutate({
                   id: editUser.id,
-                  data: { ...droits, ...(emailChanged ? { email: editEmail.trim() } : {}), is_viewer: false },
+                  data: { ...droits, ...(emailChanged ? { email: editEmail.trim() } : {}), is_viewer: false, can_provision: false },
                 });
               }}>
               Enregistrer les droits
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Modal Assignation agents */}
+      <Modal open={assignUser !== null} onClose={() => setAssignUser(null)} title={`Assigner des agents — ${assignUser?.prenom} ${assignUser?.nom}`}>
+        <div className="space-y-4">
+          <p className="text-xs text-gray-500">
+            Sélectionnez les agents que cet assistant pourra approvisionner. Il ne verra que ces agents dans les campagnes et l'historique.
+          </p>
+
+          {/* Filtres par quota */}
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-xs font-medium text-gray-600">Filtrer par quota :</span>
+            {Array.from(new Set(agents.map(a => a.quota_gb))).sort((x, y) => y - x).map(q => {
+              const count = agents.filter(a => a.quota_gb === q).length;
+              const selectedCount = agents.filter(a => a.quota_gb === q && assignedAgentIds.includes(a.id)).length;
+              const allSelected = selectedCount === count;
+              return (
+                <button
+                  key={q}
+                  type="button"
+                  onClick={() => {
+                    const ids = agents.filter(a => a.quota_gb === q).map(a => a.id);
+                    if (allSelected) {
+                      setAssignedAgentIds(prev => prev.filter(id => !ids.includes(id)));
+                    } else {
+                      setAssignedAgentIds(prev => [...new Set([...prev, ...ids])]);
+                    }
+                  }}
+                  className={`text-xs font-medium px-3 py-1.5 rounded-full border transition-all ${
+                    allSelected
+                      ? 'bg-indigo-600 text-white border-indigo-600'
+                      : 'bg-white text-gray-700 border-gray-300 hover:border-indigo-400'
+                  }`}
+                >
+                  {q} GB ({selectedCount}/{count})
+                </button>
+              );
+            })}
+            <button
+              type="button"
+              onClick={() => setAssignedAgentIds(agents.map(a => a.id))}
+              className="text-xs font-medium px-3 py-1.5 rounded-full border border-gray-300 text-gray-600 hover:bg-gray-50"
+            >
+              Tout sélectionner
+            </button>
+            <button
+              type="button"
+              onClick={() => setAssignedAgentIds([])}
+              className="text-xs font-medium px-3 py-1.5 rounded-full border border-gray-300 text-gray-600 hover:bg-gray-50"
+            >
+              Tout désélectionner
+            </button>
+          </div>
+
+          {/* Liste des agents groupés par quota */}
+          <div className="max-h-80 overflow-y-auto space-y-2 border border-gray-200 rounded-lg p-2">
+            {Array.from(new Set(agents.map(a => a.quota_gb))).sort((x, y) => y - x).map(q => (
+              <div key={q}>
+                <div className="flex items-center gap-2 px-2 py-1 bg-gray-50 rounded-md sticky top-0">
+                  <span className="text-xs font-bold text-gray-700">{q} GB</span>
+                  <span className="text-[10px] text-gray-400">
+                    ({agents.filter(a => a.quota_gb === q && assignedAgentIds.includes(a.id)).length}/{agents.filter(a => a.quota_gb === q).length})
+                  </span>
+                </div>
+                {agents.filter(a => a.quota_gb === q).map(a => (
+                  <label key={a.id} className="flex items-center gap-3 p-2 rounded-lg hover:bg-gray-50 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={assignedAgentIds.includes(a.id)}
+                      onChange={e => {
+                        if (e.target.checked) {
+                          setAssignedAgentIds(prev => [...prev, a.id]);
+                        } else {
+                          setAssignedAgentIds(prev => prev.filter(id => id !== a.id));
+                        }
+                      }}
+                      className="w-4 h-4 text-indigo-600 rounded"
+                    />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-gray-900 truncate">{a.prenom} {a.nom}</p>
+                      <p className="text-xs text-gray-500">{a.telephone} · {a.quota_gb} GB · {a.prix_cfa > 0 ? a.prix_cfa.toLocaleString('fr-FR') + ' F' : '—'}</p>
+                    </div>
+                  </label>
+                ))}
+              </div>
+            ))}
+          </div>
+          <p className="text-xs text-gray-400">{assignedAgentIds.length} agent(s) sélectionné(s)</p>
+          <div className="flex justify-end gap-3 pt-2">
+            <Button variant="secondary" onClick={() => setAssignUser(null)}>Annuler</Button>
+            <Button loading={assignMut.isPending}
+              onClick={() => {
+                if (!assignUser) return;
+                assignMut.mutate({ assistantId: assignUser.id, agentIds: assignedAgentIds });
+              }}>
+              Enregistrer les assignations
             </Button>
           </div>
         </div>

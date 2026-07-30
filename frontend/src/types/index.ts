@@ -47,6 +47,7 @@ export interface Responsable {
   is_super_admin: boolean; is_viewer: boolean;
   can_import_agents: boolean; can_launch_campagne: boolean;
   can_view_historique: boolean; can_manage_users: boolean;
+  can_provision: boolean;
   actif: number; created_at: string;
   nom?: string; prenom?: string; telephone?: string; role?: Role; role_label?: string;
 }
@@ -85,5 +86,6 @@ export interface User {
   droits: {
     can_import_agents: boolean; can_launch_campagne: boolean;
     can_view_historique: boolean; can_manage_users: boolean;
+    can_provision: boolean;
   };
 }

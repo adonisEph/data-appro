@@ -7,6 +7,7 @@ interface AuthContextType {
   login: (email: string, password: string) => Promise<void>;
   logout: () => void; isLoading: boolean;
   isSuperAdmin: boolean; isViewer: boolean;
+  isAssistantAppro: boolean; canProvision: boolean;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
@@ -38,8 +39,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   return (
     <AuthContext.Provider value={{
       user, token, login, logout, isLoading,
-      isSuperAdmin: user?.is_super_admin ?? false,
-      isViewer:     user?.is_viewer     ?? false,
+      isSuperAdmin: Boolean(user?.is_super_admin),
+      isViewer: Boolean(user?.is_viewer),
+      isAssistantAppro: !Boolean(user?.is_super_admin) && !Boolean(user?.is_viewer) && Boolean(user?.droits?.can_provision),
+      canProvision: Boolean(user?.is_super_admin) || Boolean(user?.droits?.can_launch_campagne) || Boolean(user?.droits?.can_provision),
     }}>
       {children}
     </AuthContext.Provider>

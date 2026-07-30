@@ -51,6 +51,7 @@ export interface Responsable {
   can_launch_campagne: number;
   can_view_historique: number;
   can_manage_users: number;
+  can_provision: number;
   actif: number;
   created_at: string;
 }
@@ -117,6 +118,7 @@ export interface JWTPayload {
   can_launch_campagne: boolean;
   can_view_historique: boolean;
   can_manage_users: boolean;
+  can_provision: boolean;
   iat: number;
   exp: number;
 }
