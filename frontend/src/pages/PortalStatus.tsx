@@ -262,8 +262,24 @@ export default function PortalStatus() {
                   )}
                 </div>
               ) : (
-                <div className="bg-gray-50 border-2 border-dashed border-gray-200 rounded-2xl p-6 text-center">
-                  <p className="text-sm text-gray-500">Aucune transaction pour cette campagne. Vous n'êtes peut-être pas inclus dans cette campagne.</p>
+                <div className={`rounded-2xl p-5 border-2 ${
+                  derniere_campagne.statut === 'en_cours'
+                    ? 'bg-gradient-to-br from-amber-50 to-orange-50 border-amber-300'
+                    : 'bg-gray-50 border-dashed border-gray-200'
+                }`}>
+                  {derniere_campagne.statut === 'en_cours' ? (
+                    <div className="flex items-center gap-4">
+                      <div className="w-14 h-14 rounded-2xl flex items-center justify-center shrink-0 shadow-lg bg-amber-500 shadow-amber-500/30">
+                        <span className="text-2xl">⏳</span>
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xl font-black text-amber-700">En attente</p>
+                        <p className="text-sm text-gray-600 mt-0.5">Votre approvisionnement est en cours de traitement. Veuillez patienter.</p>
+                      </div>
+                    </div>
+                  ) : (
+                    <p className="text-sm text-gray-500 text-center py-2">Vous n'avez pas été inclus dans cette campagne.</p>
+                  )}
                 </div>
               )}
             </>
