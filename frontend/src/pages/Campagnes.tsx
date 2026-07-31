@@ -205,6 +205,7 @@ export function CampagneDetailPage() {
   const [smsSuggestions, setSmsSuggestions] = useState<Array<{ id: number; sender: string | null; body: string; received_at: string | null; device_id: string | null; created_at: string }>>([]);
   const [smsSelectedId, setSmsSelectedId] = useState<number | null>(null);
   const [todoOnly, setTodoOnly] = useState(true);
+  const [manualSearch, setManualSearch] = useState('');
   const [manualSort, setManualSort] = useState<'quota' | 'montant'>('montant');
   const [manualSortDir, setManualSortDir] = useState<'asc' | 'desc'>('desc');
   const [manualModal, setManualModal] = useState<null | {
@@ -429,7 +430,16 @@ export function CampagneDetailPage() {
       return manualSortDir === 'asc' ? d : -d;
     });
 
-  const manualRows = manualRowsAll.filter(row => !todoOnly || row.statut === 'en_attente');
+  const manualRows = manualRowsAll.filter(row => {
+    if (todoOnly && row.statut !== 'en_attente') return false;
+    if (manualSearch.trim()) {
+      const q = manualSearch.toLowerCase().trim();
+      const name = `${row.a.prenom ?? ''} ${row.a.nom ?? ''}`.toLowerCase();
+      const tel = cleanTel(row.a.telephone).toLowerCase();
+      if (!name.includes(q) && !tel.includes(q)) return false;
+    }
+    return true;
+  });
   const enAttenteManuel = manualRowsAll.filter(r => r.statut === 'en_attente').length;
 
   if (isLoading) return <div className="flex justify-center py-16"><Spinner size="lg" className="text-brand-600" /></div>;
@@ -644,6 +654,16 @@ export function CampagneDetailPage() {
               />
               À faire uniquement
             </label>
+
+            <div className="flex items-center gap-2">
+              <input
+                type="text"
+                value={manualSearch}
+                onChange={e => setManualSearch(e.target.value)}
+                placeholder="🔍 Rechercher par nom ou numéro…"
+                className="px-3 py-1.5 border border-gray-300 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-brand-500 w-56"
+              />
+            </div>
 
             <div className="flex items-center gap-2">
               <span className="text-xs text-gray-500">Tri</span>
