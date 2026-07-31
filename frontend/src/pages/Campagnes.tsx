@@ -11,7 +11,7 @@ import {
   Card, Button, CampagneBadge, TxBadge, RoleBadge,
   ProgressBar, Spinner, EmptyState, Modal,
 } from '../components/ui';
-import { fmtFCFA, fmtMois, fmtTelephone, fmtPct } from '../lib/utils';
+import { fmtFCFA, fmtMois, fmtTelephone, fmtPct, cleanTel } from '../lib/utils';
 import * as XLSX from 'xlsx';
 import { ROLE_QUOTAS } from '../types';
 
@@ -356,7 +356,7 @@ export function CampagneDetailPage() {
 
       return {
         'Agent': `${tx.prenom ?? ''} ${tx.nom ?? ''}`.trim(),
-        'Téléphone': tx.telephone,
+        'Téléphone': cleanTel(tx.telephone),
         'Option': tx.option_used === 'argent' ? 'Argent' : 'Forfait',
         'Quota (GB)': quota,
         'Montant (FCFA)': montant,
@@ -700,11 +700,11 @@ export function CampagneDetailPage() {
                       </td>
                       <td className="px-3 py-2">
                         <div className="flex items-center gap-2">
-                          <span className="font-mono text-xs text-gray-600">{fmtTelephone(a.telephone)}</span>
+                          <span className="font-mono text-xs text-gray-600">{cleanTel(a.telephone)}</span>
                           <button
                             onClick={async () => {
                               try {
-                                await navigator.clipboard.writeText(a.telephone);
+                                await navigator.clipboard.writeText(cleanTel(a.telephone));
                                 toast.success('Copié', 'Téléphone copié.');
                               } catch {
                                 toast.error('Erreur', 'Impossible de copier.');
@@ -812,11 +812,11 @@ export function CampagneDetailPage() {
                     )}
                   </div>
                   <div className="flex items-center gap-2 text-xs">
-                    <span className="font-mono text-gray-600">{fmtTelephone(a.telephone)}</span>
+                    <span className="font-mono text-gray-600">{cleanTel(a.telephone)}</span>
                     <button
                       onClick={async () => {
                         try {
-                          await navigator.clipboard.writeText(a.telephone);
+                          await navigator.clipboard.writeText(cleanTel(a.telephone));
                           toast.success('Copié', 'Téléphone copié.');
                         } catch {
                           toast.error('Erreur', 'Impossible de copier.');
@@ -877,7 +877,7 @@ export function CampagneDetailPage() {
         {manualModal && (
           <div className="space-y-4">
             <div className="bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-xs text-gray-700">
-              <p><strong>Téléphone :</strong> {fmtTelephone(manualModal.telephone)}</p>
+              <p><strong>Téléphone :</strong> <span className="font-mono">{cleanTel(manualModal.telephone)}</span></p>
               <p><strong>Rappel :</strong> exécute l'action dans Airtel Money, puis colle le SMS complet.</p>
             </div>
 
@@ -922,20 +922,6 @@ export function CampagneDetailPage() {
               <label className="block text-xs font-medium text-gray-700 mb-1">SMS complet (preuve) *</label>
               <div className="flex items-center justify-between gap-3 mb-2">
                 <div className="flex items-center gap-2">
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    loading={smsSuggestMut.isPending}
-                    onClick={() => {
-                      smsSuggestMut.mutate({
-                        telephone: manualModal.telephone,
-                        action: manualModal.action,
-                        montant_fcfa: manualModal.montant_fcfa ?? undefined,
-                      });
-                    }}
-                  >
-                    Récupérer SMS Airtel
-                  </Button>
                   <Button
                     variant="secondary"
                     size="sm"
@@ -1077,7 +1063,7 @@ export function CampagneDetailPage() {
                 {filteredTx.map(tx => (
                   <tr key={tx.id} className="hover:bg-gray-50">
                     <td className="px-4 py-3 font-medium text-gray-900">{tx.prenom} {tx.nom}</td>
-                    <td className="px-4 py-3 font-mono text-xs text-gray-600">{fmtTelephone(tx.telephone)}</td>
+                    <td className="px-4 py-3 font-mono text-xs text-gray-600">{cleanTel(tx.telephone)}</td>
                     <td className="px-4 py-3">{tx.role && <RoleBadge role={tx.role} />}</td>
                     <td className="px-4 py-3">
                       <span className="text-xs text-gray-600 uppercase">{tx.option_used}</span>

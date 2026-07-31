@@ -61,6 +61,15 @@ export function fmtNumber(n: number | null | undefined): string {
 
 // ── Téléphone ─────────────────────────────────────────────────
 
+// Nettoyer un numéro: retirer préfixe +242/242 et espaces → chiffres locaux uniquement
+export function cleanTel(tel: string | null | undefined): string {
+  if (!tel) return '';
+  let t = tel.replace(/[\s\-+().]/g, '');
+  if (t.startsWith('242') && t.length > 9) t = t.slice(3);
+  if (t.startsWith('0') && t.length === 10) t = t.slice(1);
+  return t;
+}
+
 export function fmtTelephone(tel: string | null | undefined): string {
   if (!tel) return '—';
   const t = tel.replace(/\D/g, '');
