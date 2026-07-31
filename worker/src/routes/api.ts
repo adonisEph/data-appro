@@ -14,6 +14,14 @@ async function fetchTrackedAgentIdSet(db: Env['DB']): Promise<Set<number>> {
   return new Set<number>((results ?? []).map(r => Number(r.agent_id)).filter(n => Number.isFinite(n) && n > 0));
 }
 
+// Nettoyer un numéro: retirer préfixe +242/242 et espaces → 8 chiffres
+function cleanTelephone(raw: string): string {
+  let n = raw.replace(/[\s\-+().]/g, '');
+  if (n.startsWith('242') && n.length > 8) n = n.slice(3);
+  if (n.startsWith('0') && n.length === 9) n = n.slice(1);
+  return n;
+}
+
 function isTrackedAgentId(trackedSet: Set<number>, agentId: unknown): boolean {
   const id = typeof agentId === 'number' ? agentId : Number(agentId);
   return Number.isFinite(id) && trackedSet.has(id);
@@ -463,6 +471,7 @@ agentsRouter.post('/', noViewerMiddleware, requireCanImportAgents, async c => {
     return c.json({ error: 'role invalide' }, 400);
   }
 
+  const cleanTel = cleanTelephone(telephone);
   const quota = body.quota_gb !== undefined ? body.quota_gb : ROLE_QUOTAS[role];
   const prix = body.prix_cfa !== undefined ? body.prix_cfa : 0;
 
@@ -473,7 +482,7 @@ agentsRouter.post('/', noViewerMiddleware, requireCanImportAgents, async c => {
     ).bind(
       nom,
       prenom,
-      telephone,
+      cleanTel,
       role,
       body.role_label ?? null,
       quota,
@@ -515,6 +524,7 @@ agentsRouter.post('/import', noViewerMiddleware, requireCanImportAgents, async c
 
   for (const agent of agents) {
     if (!agent.telephone || !agent.role) { errors.push(`Invalide: ${JSON.stringify(agent)}`); skipped++; continue; }
+    const cleanTel = cleanTelephone(agent.telephone);
     const quota = agent.quota_gb ?? ROLE_QUOTAS[agent.role];
     try {
       await c.env.DB.prepare(
@@ -526,7 +536,7 @@ agentsRouter.post('/import', noViewerMiddleware, requireCanImportAgents, async c
            quota_gb = excluded.quota_gb, forfait_label = excluded.forfait_label,
            prix_cfa = excluded.prix_cfa, updated_at = datetime('now')`
       ).bind(
-        agent.nom || 'Agent', agent.prenom || '', agent.telephone,
+        agent.nom || 'Agent', agent.prenom || '', cleanTel,
         agent.role, agent.role_label ?? null, quota,
         agent.forfait_label ?? null, agent.prix_cfa ?? 0
       ).run();
@@ -556,7 +566,7 @@ agentsRouter.put('/:id', noViewerMiddleware, async c => {
   const updates: string[] = []; const values: unknown[] = [];
   if (body.nom           !== undefined) { updates.push('nom = ?');           values.push(body.nom); }
   if (body.prenom        !== undefined) { updates.push('prenom = ?');         values.push(body.prenom); }
-  if (body.telephone     !== undefined) { updates.push('telephone = ?');      values.push(body.telephone); }
+  if (body.telephone     !== undefined) { updates.push('telephone = ?');      values.push(cleanTelephone(body.telephone)); }
   if (body.role_label    !== undefined) { updates.push('role_label = ?');     values.push(body.role_label); }
   if (body.quota_gb      !== undefined) { updates.push('quota_gb = ?');       values.push(body.quota_gb); }
   if (body.prix_cfa      !== undefined) { updates.push('prix_cfa = ?');       values.push(body.prix_cfa); }

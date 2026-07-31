@@ -63,8 +63,16 @@ export function fmtNumber(n: number | null | undefined): string {
 
 export function fmtTelephone(tel: string | null | undefined): string {
   if (!tel) return '—';
-  // "242052051040" → "+242 05 205 1040"
   const t = tel.replace(/\D/g, '');
+  // 8 chiffres (format nettoyé): "05205104" → "05 205 104"
+  if (t.length === 8) {
+    return `${t.slice(0, 2)} ${t.slice(2, 5)} ${t.slice(5)}`;
+  }
+  // 9 chiffres avec 0: "052051040" → "05 205 1040"
+  if (t.length === 9 && t.startsWith('0')) {
+    return `${t.slice(0, 2)} ${t.slice(2, 5)} ${t.slice(5)}`;
+  }
+  // Ancien format 242: "242052051040" → "+242 05 205 1040"
   if (t.startsWith('242') && t.length === 12) {
     return `+242 ${t.slice(3, 5)} ${t.slice(5, 8)} ${t.slice(8)}`;
   }

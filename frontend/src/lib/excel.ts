@@ -42,16 +42,18 @@ function gbToRole(gbStr: string): { role: Role; quota_gb: number } | null {
 
 // ── Normalisation numéro +242 ────────────────────────────────
 // Exemples fichier Airtel CG :
-//   55301273   (8 chiffres, sans le 0) → 242055301273
-//   40016103   (8 chiffres, sans le 0) → 242040016103
-//   052051040  (9 chiffres avec 0)     → 242052051040
+//   55301273   (8 chiffres, sans le 0) → 055301273
+//   40016103   (8 chiffres, sans le 0) → 040016103
+//   052051040  (9 chiffres avec 0)     → 052051040
+//   +242052051040                      → 052051040
 function normalizeTel(raw: string | number): string {
   let t = String(raw).replace(/[\s\-().+]/g, '');
-  if (/^242\d{9}$/.test(t)) return t;            // Déjà au bon format
-  if (/^0[45]\d{7}$/.test(t)) return '242' + t;  // 9 chiffres avec 0 initial (05xxx, 04xxx)
-  if (/^[45]\d{7}$/.test(t)) return '2420' + t;  // 8 chiffres commençant par 5 ou 4
-  if (/^\d{8}$/.test(t)) return '2420' + t;       // 8 chiffres autres
-  return '242' + t;
+  if (/^242\d{9}$/.test(t)) return t.slice(3);     // 242052051040 → 052051040
+  if (/^0[45]\d{7}$/.test(t)) return t;             // 052051040 → 052051040
+  if (/^[45]\d{7}$/.test(t)) return '0' + t;        // 55301273 → 055301273
+  if (/^\d{8}$/.test(t)) return '0' + t;             // 8 chiffres autres → 0 + chiffres
+  if (/^242\d{8}$/.test(t)) return t.slice(3);      // 242 + 8 chiffres
+  return t.replace(/^242/, '');
 }
 
 // ── Détection automatique des colonnes ───────────────────────
@@ -133,7 +135,7 @@ export function parseExcelFile(file: File): Promise<{
 
           const telephone = normalizeTel(rawNumero);
 
-          if (telephone.length < 11) {
+          if (telephone.length < 9) {
             errors.push(`Ligne ${lineNum} : numéro "${rawNumero}" invalide (trop court)`);
             return;
           }

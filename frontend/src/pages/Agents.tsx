@@ -192,7 +192,11 @@ export default function AgentsPage() {
     setCreateAgent(true);
   };
 
-  const normalizeTel = (v: string) => String(v ?? '').replace(/\D+/g, '');
+  const normalizeTel = (v: string) => {
+    let t = String(v ?? '').replace(/\D+/g, '');
+    if (t.startsWith('242') && t.length > 9) t = t.slice(3);
+    return t;
+  };
 
   const openTracked = () => {
     const trackedAgents = trackedData?.tracked_agents ?? [];
