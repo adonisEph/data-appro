@@ -1,6 +1,7 @@
-import { createContext, useContext, useState, useEffect, type ReactNode } from 'react';
+import { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from 'react';
 import type { User } from '../types';
 import { authApi } from '../lib/api';
+import { useInactivityLogout, SAVED_EMAIL_KEY, AUTO_LOGOUT_KEY } from './useInactivityLogout';
 
 interface AuthContextType {
   user: User | null; token: string | null;
@@ -28,13 +29,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const res = await authApi.login(email, password);
     localStorage.setItem('appro_token', res.token);
     localStorage.setItem('appro_user', JSON.stringify(res.user));
+    localStorage.removeItem(AUTO_LOGOUT_KEY);
     setToken(res.token); setUser(res.user);
   };
 
-  const logout = () => {
+  const logout = useCallback(() => {
     localStorage.removeItem('appro_token'); localStorage.removeItem('appro_user');
     setToken(null); setUser(null);
-  };
+  }, []);
+
+  // Auto-déconnexion après inactivité — sauvegarde l'email pour pré-remplir la page de connexion
+  const handleInactivityTimeout = useCallback(() => {
+    const savedUser = localStorage.getItem('appro_user');
+    if (savedUser) {
+      try {
+        const u: User = JSON.parse(savedUser);
+        if (u.email) localStorage.setItem(SAVED_EMAIL_KEY, u.email);
+      } catch { /* ignore */ }
+    }
+    localStorage.setItem(AUTO_LOGOUT_KEY, '1');
+    logout();
+  }, [logout]);
+
+  useInactivityLogout(Boolean(user), handleInactivityTimeout);
 
   return (
     <AuthContext.Provider value={{

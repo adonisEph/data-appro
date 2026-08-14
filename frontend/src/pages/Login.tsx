@@ -1,22 +1,38 @@
-import { useState, type FormEvent } from 'react';
+import { useState, useEffect, type FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import { Button } from '../components/ui';
 import { usePWA } from '../hooks/usePWA';
+import { SAVED_EMAIL_KEY, AUTO_LOGOUT_KEY } from '../hooks/useInactivityLogout';
 
 export default function LoginPage() {
   const { login } = useAuth();
   const navigate = useNavigate();
   const { canInstall, isInstalling, install } = usePWA();
-  const [email, setEmail]       = useState('');
-  const [password, setPassword] = useState('');
-  const [error, setError]       = useState('');
-  const [loading, setLoading]   = useState(false);
-  const [showPwd, setShowPwd]   = useState(false);
+  const [email, setEmail]           = useState('');
+  const [password, setPassword]     = useState('');
+  const [error, setError]           = useState('');
+  const [loading, setLoading]       = useState(false);
+  const [showPwd, setShowPwd]       = useState(false);
+  const [autoLoggedOut, setAutoLoggedOut] = useState(false);
+
+  useEffect(() => {
+    const wasAutoLoggedOut = localStorage.getItem(AUTO_LOGOUT_KEY) === '1';
+    const savedEmail = localStorage.getItem(SAVED_EMAIL_KEY) ?? '';
+    if (wasAutoLoggedOut) {
+      setAutoLoggedOut(true);
+      if (savedEmail) setEmail(savedEmail);
+      localStorage.removeItem(AUTO_LOGOUT_KEY);
+    }
+  }, []);
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault(); setError(''); setLoading(true);
-    try { await login(email, password); navigate('/'); }
+    try {
+      await login(email, password);
+      localStorage.removeItem(SAVED_EMAIL_KEY);
+      navigate('/');
+    }
     catch (err) { setError(err instanceof Error ? err.message : 'Erreur de connexion'); }
     finally { setLoading(false); }
   };
@@ -37,7 +53,20 @@ export default function LoginPage() {
 
         {/* Card login */}
         <div className="bg-white rounded-2xl p-6 md:p-8 shadow-2xl">
-          <h2 className="text-lg font-semibold text-gray-900 mb-6">Connexion</h2>
+          <h2 className="text-lg font-semibold text-gray-900 mb-4">Connexion</h2>
+
+          {autoLoggedOut && (
+            <div className="flex items-start gap-3 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 mb-5">
+              <svg className="w-5 h-5 text-amber-500 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
+              </svg>
+              <div>
+                <p className="text-sm font-semibold text-amber-800">Session expirée</p>
+                <p className="text-xs text-amber-700 mt-0.5">Vous avez été déconnecté après 30 min d'inactivité. Vos identifiants sont conservés.</p>
+              </div>
+            </div>
+          )}
+
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1.5">Adresse email</label>
