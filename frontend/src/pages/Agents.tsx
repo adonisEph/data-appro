@@ -9,7 +9,7 @@ import { ConfirmModal } from '../components/ui/ConfirmModal';
 import { Card, Button, Modal, Spinner, EmptyState } from '../components/ui';
 import { ROLE_QUOTAS, type Role, type Agent } from '../types';
 import { useAuth } from '../hooks/useAuth';
-import { fmtTelephone } from '../lib/utils';
+import { fmtTelephone, cleanTel } from '../lib/utils';
 
 const ROLES: Role[] = ['technicien', 'responsable_junior', 'responsable_senior', 'manager'];
 const ROLE_INTERNAL_LABELS: Record<Role, string> = {
@@ -261,6 +261,147 @@ export default function AgentsPage() {
     XLSX.writeFile(wb, `agents_${y}-${m}-${d}.xlsx`);
   };
 
+  const printOfficialList = () => {
+    const eligible = agents.filter(a => a.actif !== 0);
+    const sorted = [...eligible].sort((a, b) => {
+      const an = `${a.nom} ${a.prenom}`.trim().toLowerCase();
+      const bn = `${b.nom} ${b.prenom}`.trim().toLowerCase();
+      return an.localeCompare(bn, 'fr');
+    });
+    const totalPrix = sorted.reduce((s, a) => s + (a.prix_cfa ?? 0), 0);
+    const now = new Date();
+    const dateStr = now.toLocaleDateString('fr-FR', { day: '2-digit', month: 'long', year: 'numeric' });
+    const timeStr = now.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+
+    const rows = sorted.map((a, i) => `
+      <tr>
+        <td class="num">${i + 1}</td>
+        <td class="name">${a.prenom} ${a.nom}</td>
+        <td class="center">${a.quota_gb} GB</td>
+        <td class="right">${a.prix_cfa > 0 ? a.prix_cfa.toLocaleString('fr-FR') + ' F' : '—'}</td>
+        <td class="tel">${cleanTel(a.telephone)}</td>
+        <td class="center"><span class="badge">Éligible</span></td>
+      </tr>
+    `).join('');
+
+    const html = `<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Liste officielle des agents éligibles — ${dateStr}</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
+    color: #1f2937; background: #fff; padding: 32px;
+  }
+  .header {
+    display: flex; justify-content: space-between; align-items: flex-start;
+    border-bottom: 3px solid #4f46e5; padding-bottom: 16px; margin-bottom: 24px;
+  }
+  .header-left h1 { font-size: 20px; font-weight: 700; color: #111827; }
+  .header-left p { font-size: 12px; color: #6b7280; margin-top: 4px; }
+  .header-right { text-align: right; }
+  .header-right .date { font-size: 13px; font-weight: 600; color: #374151; }
+  .header-right .time { font-size: 11px; color: #9ca3af; margin-top: 2px; }
+  .header-right .org { font-size: 14px; font-weight: 700; color: #4f46e5; margin-top: 6px; }
+  table { width: 100%; border-collapse: collapse; }
+  thead tr { background: #f3f4f6; }
+  thead th {
+    padding: 10px 12px; font-size: 11px; font-weight: 700; text-transform: uppercase;
+    letter-spacing: 0.5px; color: #4b5563; border-bottom: 2px solid #e5e7eb;
+    text-align: left;
+  }
+  thead th.center { text-align: center; }
+  thead th.right { text-align: right; }
+  tbody tr { border-bottom: 1px solid #f3f4f6; }
+  tbody tr:nth-child(even) { background: #fafafa; }
+  tbody td { padding: 8px 12px; font-size: 13px; color: #1f2937; }
+  td.num { text-align: center; font-weight: 600; color: #6b7280; width: 48px; }
+  td.name { font-weight: 500; }
+  td.center { text-align: center; font-weight: 600; color: #4f46e5; }
+  td.right { text-align: right; }
+  td.tel { font-family: 'Courier New', monospace; font-size: 12px; color: #374151; }
+  .badge {
+    display: inline-block; padding: 2px 10px; font-size: 10px; font-weight: 700;
+    color: #065f46; background: #d1fae5; border-radius: 9999px;
+  }
+  .footer {
+    margin-top: 20px; display: flex; justify-content: space-between;
+    border-top: 2px solid #e5e7eb; padding-top: 16px;
+  }
+  .footer .stat { font-size: 13px; }
+  .footer .stat strong { font-size: 18px; font-weight: 700; color: #111827; display: block; }
+  .footer .stat span { font-size: 11px; color: #6b7280; }
+  .footer .stat.right { text-align: right; }
+  .signature { margin-top: 48px; display: flex; justify-content: space-between; }
+  .signature div { font-size: 11px; color: #6b7280; border-top: 1px solid #d1d5db; padding-top: 6px; width: 200px; text-align: center; }
+  @media print {
+    body { padding: 16px; }
+    .header { page-break-after: avoid; }
+    tbody tr { page-break-inside: avoid; }
+  }
+</style>
+</head>
+<body>
+  <div class="header">
+    <div class="header-left">
+      <h1>Liste officielle des agents éligibles</h1>
+      <p>Campagne d'approvisionnement data — Airtel CG</p>
+    </div>
+    <div class="header-right">
+      <div class="date">${dateStr}</div>
+      <div class="time">Édité à ${timeStr}</div>
+      <div class="org">Data Approvisionnement</div>
+    </div>
+  </div>
+
+  <table>
+    <thead>
+      <tr>
+        <th class="center">N°</th>
+        <th>Nom(s) et Prénom(s)</th>
+        <th class="center">Quota</th>
+        <th class="right">Prix</th>
+        <th>Téléphone</th>
+        <th class="center">Statut</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${rows}
+    </tbody>
+  </table>
+
+  <div class="footer">
+    <div class="stat">
+      <strong>${sorted.length}</strong>
+      <span>Agents éligibles</span>
+    </div>
+    <div class="stat right">
+      <strong>${totalPrix.toLocaleString('fr-FR')} FCFA</strong>
+      <span>Budget total</span>
+    </div>
+  </div>
+
+  <div class="signature">
+    <div>Responsable approvisionnement</div>
+    <div>Direction</div>
+  </div>
+
+  <script>window.print();</script>
+</body>
+</html>`;
+
+    const w = window.open('', '_blank', 'width=900,height=700');
+    if (!w) {
+      toast.error('Impression bloquée', 'Autorisez les pop-ups pour imprimer la liste.');
+      return;
+    }
+    w.document.write(html);
+    w.document.close();
+  };
+
   // Compteurs par quota
   const quotaGroups = agents.reduce((acc, a) => {
     const key = `${a.quota_gb}GB`;
@@ -411,7 +552,10 @@ export default function AgentsPage() {
         </div>
       </div>
 
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+      <div
+        className="grid gap-3"
+        style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))' }}
+      >
         {quotaEntriesShown.map(([quota, count]) => {
           const gb = parseFloat(String(quota).replace('GB', ''));
           const active = filterQuotaGb !== null && gb === filterQuotaGb;
@@ -431,14 +575,28 @@ export default function AgentsPage() {
             </Card>
           </button>
           );
-        })}
+        })})
       </div>
 
       {/* Filtres */}
-      <div className="flex gap-2 flex-col sm:flex-row">
+      <div className="flex gap-2 flex-col sm:flex-row sm:items-center">
         <input type="search" placeholder="Rechercher nom, numéro, poste…" value={search}
           onChange={e => setSearch(e.target.value)}
           className="flex-1 px-3.5 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"/>
+        <Button
+          variant="secondary"
+          size="sm"
+          onClick={printOfficialList}
+          disabled={agents.length === 0}
+          className="shrink-0"
+          title="Imprimer la liste officielle des agents éligibles"
+        >
+          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"/>
+          </svg>
+          <span className="hidden sm:inline">Imprimer la liste officielle</span>
+          <span className="sm:hidden">Imprimer</span>
+        </Button>
         <select value={filterRole} onChange={e => setFilterRole(e.target.value)}
           className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 sm:w-44">
           <option value="">Tous les postes</option>
