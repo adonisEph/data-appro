@@ -205,8 +205,15 @@ export default function AgentsPage() {
     mutationFn: (data: { agent_ids: number[]; client?: string | null; zone?: string | null }) => agentsApi.bulkAssign(data),
     onSuccess: (res) => {
       qc.invalidateQueries({ queryKey: ['agents'] });
+      qc.invalidateQueries({ queryKey: ['stats'] });
       qc.invalidateQueries({ queryKey: ['campagnes'] });
+      qc.invalidateQueries({ queryKey: ['campagne-live'] });
+      qc.invalidateQueries({ queryKey: ['campagne-eligible-agents'] });
+      qc.invalidateQueries({ queryKey: ['campagne-viewer'] });
+      qc.invalidateQueries({ queryKey: ['campagnes-viewer'] });
       qc.invalidateQueries({ queryKey: ['historique'] });
+      qc.invalidateQueries({ queryKey: ['transactions'] });
+      qc.invalidateQueries({ queryKey: ['portal-check-ins'] });
       toast.success('Assignation réussie', `${res.updated} agent(s) mis à jour.`);
       setBulkAssignOpen(false);
       setBulkSelected(new Set());
