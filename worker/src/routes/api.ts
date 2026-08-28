@@ -446,6 +446,47 @@ agentsRouter.get('/quality-check', async c => {
   });
 });
 
+// Bulk assign client/zone to multiple agents — MUST be before /:id
+agentsRouter.put('/bulk-assign', superAdminMiddleware, async c => {
+  const { agent_ids, client, zone } = await c.req.json<{
+    agent_ids: number[];
+    client?: string | null;
+    zone?: string | null;
+  }>();
+
+  if (!Array.isArray(agent_ids) || agent_ids.length === 0) {
+    return c.json({ error: 'Aucun agent sélectionné' }, 400);
+  }
+  if (client === undefined && zone === undefined) {
+    return c.json({ error: 'Rien à assigner' }, 400);
+  }
+
+  const updates: string[] = [];
+  if (client !== undefined) updates.push('client = ?');
+  if (zone !== undefined) updates.push('zone = ?');
+  updates.push("updated_at = datetime('now')");
+
+  const placeholders = agent_ids.map(() => '?').join(', ');
+  const bindValues: unknown[] = [];
+  if (client !== undefined) bindValues.push(client);
+  if (zone !== undefined) bindValues.push(zone);
+  bindValues.push(...agent_ids);
+
+  await c.env.DB.prepare(
+    `UPDATE agents SET ${updates.join(', ')} WHERE id IN (${placeholders})`
+  ).bind(...bindValues).run();
+
+  await c.env.DB.prepare(
+    `INSERT INTO audit_logs (responsable_id, action, details) VALUES (?, ?, ?)`
+  ).bind(
+    Number((c.get('user') as JWTPayload).sub),
+    'AGENT_BULK_ASSIGN',
+    JSON.stringify({ agent_ids, client, zone })
+  ).run();
+
+  return c.json({ ok: true, updated: agent_ids.length });
+});
+
 agentsRouter.get('/:id', async c => {
   const id = Number(c.req.param('id'));
   const agent = await c.env.DB.prepare(`SELECT * FROM agents WHERE id = ?`).bind(id).first();
@@ -714,47 +755,6 @@ agentsRouter.delete('/:id', superAdminMiddleware, async c => {
   await c.env.DB.prepare(`INSERT INTO audit_logs (agent_id, responsable_id, action, details) VALUES (?, ?, ?, ?)`)
     .bind(id, Number((c.get('user') as JWTPayload).sub), 'AGENT_DELETED', JSON.stringify({ agent })).run();
   return c.json({ ok: true });
-});
-
-// Bulk assign client/zone to multiple agents
-agentsRouter.put('/bulk-assign', superAdminMiddleware, async c => {
-  const { agent_ids, client, zone } = await c.req.json<{
-    agent_ids: number[];
-    client?: string | null;
-    zone?: string | null;
-  }>();
-
-  if (!Array.isArray(agent_ids) || agent_ids.length === 0) {
-    return c.json({ error: 'Aucun agent sélectionné' }, 400);
-  }
-  if (client === undefined && zone === undefined) {
-    return c.json({ error: 'Rien à assigner' }, 400);
-  }
-
-  const updates: string[] = [];
-  if (client !== undefined) updates.push('client = ?');
-  if (zone !== undefined) updates.push('zone = ?');
-  updates.push("updated_at = datetime('now')");
-
-  const placeholders = agent_ids.map(() => '?').join(', ');
-  const bindValues: unknown[] = [];
-  if (client !== undefined) bindValues.push(client);
-  if (zone !== undefined) bindValues.push(zone);
-  bindValues.push(...agent_ids);
-
-  await c.env.DB.prepare(
-    `UPDATE agents SET ${updates.join(', ')} WHERE id IN (${placeholders})`
-  ).bind(...bindValues).run();
-
-  await c.env.DB.prepare(
-    `INSERT INTO audit_logs (responsable_id, action, details) VALUES (?, ?, ?)`
-  ).bind(
-    Number((c.get('user') as JWTPayload).sub),
-    'AGENT_BULK_ASSIGN',
-    JSON.stringify({ agent_ids, client, zone })
-  ).run();
-
-  return c.json({ ok: true, updated: agent_ids.length });
 });
 
 api.route('/agents', agentsRouter);
