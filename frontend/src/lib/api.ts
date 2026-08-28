@@ -221,7 +221,7 @@ export const portalApi = {
     }).then(async res => {
       const data = await res.json();
       if (!res.ok) throw new Error((data as { error?: string }).error ?? 'Connexion échouée');
-      return data as { token: string; agent: { id: number; nom: string; prenom: string; telephone: string; quota_gb: number; role_label: string | null } };
+      return data as { token: string; agent: { id: number; nom: string; prenom: string; telephone: string; quota_gb: number; role_label: string | null; client: string | null; zone: string | null } };
     });
   },
   status: (token: string) => {
@@ -231,7 +231,7 @@ export const portalApi = {
       const data = await res.json();
       if (!res.ok) throw new Error((data as { error?: string }).error ?? 'Erreur');
       return data as {
-        agent: { id: number; nom: string; prenom: string; telephone: string; quota_gb: number; role_label: string | null };
+        agent: { id: number; nom: string; prenom: string; telephone: string; quota_gb: number; role_label: string | null; client: string | null; zone: string | null };
         derniere_campagne: { id: number; mois: string; statut: string; option_envoi: string; lance_le: string | null; termine_le: string | null } | null;
         transaction: { statut: string; option_used: string; montant_fcfa: number | null; airtel_message: string | null; airtel_reference: string | null; tente_le: string; confirme_le: string | null; nb_tentatives: number } | null;
         historique_recent: Array<{ campagne_id: number; mois: string; statut: string; option_used: string; montant_fcfa: number | null; airtel_message: string | null; confirme_le: string | null }>;
@@ -239,7 +239,7 @@ export const portalApi = {
     });
   },
   checkIns: (limit?: number) =>
-    request<{ check_ins: Array<{ id: number; agent_id: number; telephone: string; ip_address: string | null; user_agent: string | null; created_at: string; nom: string; prenom: string; quota_gb: number; role_label: string | null }>; total: number }>(
+    request<{ check_ins: Array<{ id: number; agent_id: number; telephone: string; ip_address: string | null; user_agent: string | null; created_at: string; nom: string; prenom: string; quota_gb: number; role_label: string | null; client: string | null; zone: string | null }>; total: number }>(
       `/portal/check-ins${limit ? `?limit=${limit}` : ''}`
     ),
   reclamation: (token: string, sujet: string, message: string) => {

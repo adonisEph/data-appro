@@ -1527,7 +1527,7 @@ campagnesRouter.get('/:id', async c => {
   }
 
   const { results: transactionsRaw } = await c.env.DB.prepare(
-    `SELECT t.*, a.nom, a.prenom, a.role, a.role_label
+    `SELECT t.*, a.nom, a.prenom, a.role, a.role_label, a.client, a.zone
      FROM transactions t JOIN agents a ON a.id = t.agent_id
      WHERE t.campagne_id = ?
        AND (
@@ -1766,7 +1766,7 @@ historiqueRouter.get('/transactions', async c => {
   const isAssistant = Boolean((user as JWTPayload | undefined)?.can_provision) && !isSuperAdmin;
   const trackedSet = !isSuperAdmin && !isAssistant ? await fetchTrackedAgentIdSet(c.env.DB) : new Set<number>();
   const assistantSet = isAssistant ? await fetchAssistantAgentIdSet(c.env.DB, Number(user?.sub)) : new Set<number>();
-  let query = `SELECT t.*, a.nom, a.prenom, a.role, a.role_label, a.prix_cfa, c.mois
+  let query = `SELECT t.*, a.nom, a.prenom, a.role, a.role_label, a.prix_cfa, a.client, a.zone, c.mois
                FROM transactions t JOIN agents a ON a.id = t.agent_id JOIN campagnes c ON c.id = t.campagne_id WHERE 1=1`;
   const params: unknown[] = [];
   if (agent_id)    { query += ' AND t.agent_id = ?';    params.push(Number(agent_id)); }
@@ -1864,9 +1864,9 @@ portalRouter.post('/login', async c => {
 
   // Chercher l'agent par numéro (fin du numéro pour tolérer préfixes pays)
   const agent = await c.env.DB.prepare(
-    `SELECT id, nom, prenom, telephone, quota_gb, role_label, actif
+    `SELECT id, nom, prenom, telephone, quota_gb, role_label, actif, client, zone
      FROM agents WHERE REPLACE(REPLACE(REPLACE(REPLACE(telephone, ' ', ''), '-', ''), '+', ''), '.', '') LIKE ?`
-  ).bind(`%${normalizedTel}`).first<{ id: number; nom: string; prenom: string; telephone: string; quota_gb: number; role_label: string | null; actif: number }>();
+  ).bind(`%${normalizedTel}`).first<{ id: number; nom: string; prenom: string; telephone: string; quota_gb: number; role_label: string | null; actif: number; client: string | null; zone: string | null }>();
 
   if (!agent) return c.json({ error: 'Numéro introuvable dans la flotte. Vérifiez votre numéro.' }, 404);
   if (!agent.actif) return c.json({ error: 'Votre compte est inactif. Contactez un responsable.' }, 403);
@@ -1901,6 +1901,8 @@ portalRouter.post('/login', async c => {
       telephone: agent.telephone,
       quota_gb: agent.quota_gb,
       role_label: agent.role_label,
+      client: agent.client,
+      zone: agent.zone,
     },
   });
 });
@@ -1931,8 +1933,8 @@ portalRouter.get('/status', async c => {
 
   // Infos agent
   const agent = await c.env.DB.prepare(
-    `SELECT id, nom, prenom, telephone, quota_gb, role_label, actif FROM agents WHERE id = ?`
-  ).bind(agentId).first<{ id: number; nom: string; prenom: string; telephone: string; quota_gb: number; role_label: string | null; actif: number }>();
+    `SELECT id, nom, prenom, telephone, quota_gb, role_label, actif, client, zone FROM agents WHERE id = ?`
+  ).bind(agentId).first<{ id: number; nom: string; prenom: string; telephone: string; quota_gb: number; role_label: string | null; actif: number; client: string | null; zone: string | null }>();
   if (!agent) return c.json({ error: 'Agent introuvable' }, 404);
 
   // Dernière campagne (la plus récente)
@@ -1966,6 +1968,8 @@ portalRouter.get('/status', async c => {
       telephone: agent.telephone,
       quota_gb: agent.quota_gb,
       role_label: agent.role_label,
+      client: agent.client,
+      zone: agent.zone,
     },
     derniere_campagne: lastCampagne ?? null,
     transaction: transaction ?? null,
@@ -1978,7 +1982,7 @@ portalRouter.get('/check-ins', authMiddleware, superAdminMiddleware, async c => 
   const limit = Math.min(Number(c.req.query('limit') ?? 100), 500);
   const { results } = await c.env.DB.prepare(
     `SELECT apl.id, apl.agent_id, apl.telephone, apl.ip_address, apl.user_agent, apl.created_at,
-            a.nom, a.prenom, a.quota_gb, a.role_label
+            a.nom, a.prenom, a.quota_gb, a.role_label, a.client, a.zone
      FROM agent_portal_logins apl
      LEFT JOIN agents a ON a.id = apl.agent_id
      ORDER BY apl.created_at DESC LIMIT ?`

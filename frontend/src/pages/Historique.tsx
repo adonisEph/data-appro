@@ -27,7 +27,7 @@ export default function HistoriquePage() {
   const canView = isSuperAdmin || Boolean(user?.droits?.can_view_historique);
   if (!canView) {
     return (
-      <div className="p-4 md:p-6 max-w-6xl mx-auto space-y-4 md:space-y-6">
+      <div className="p-4 md:p-6 max-w-[1400px] mx-auto space-y-4 md:space-y-6">
         <div>
           <h1 className="text-xl md:text-2xl font-bold text-gray-900">Historique & Audit</h1>
           <p className="text-sm text-gray-500 mt-0.5">Preuves d'envoi et gestion des litiges</p>
@@ -245,7 +245,7 @@ export default function HistoriquePage() {
 
 
   return (
-    <div className="p-4 md:p-6 max-w-6xl mx-auto space-y-4 md:space-y-6">
+    <div className="p-4 md:p-6 max-w-[1400px] mx-auto space-y-4 md:space-y-6">
       <div>
         <h1 className="text-xl md:text-2xl font-bold text-gray-900">Historique & Audit</h1>
         <p className="text-sm text-gray-500 mt-0.5">Preuves d'envoi et gestion des litiges</p>
@@ -312,6 +312,8 @@ export default function HistoriquePage() {
                   <tr className="border-b border-gray-100">
                     <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Agent</th>
                     <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Téléphone</th>
+                    <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Client</th>
+                    <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Zone</th>
                     <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Rôle</th>
                     <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Campagne</th>
                     <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Statut</th>
@@ -332,6 +334,8 @@ export default function HistoriquePage() {
                         </div>
                       </td>
                       <td className="px-4 py-3 font-mono text-xs text-gray-600">{fmtTelephone(tx.telephone)}</td>
+                      <td className="px-4 py-3 text-xs text-gray-600 whitespace-nowrap">{tx.client ?? '—'}</td>
+                      <td className="px-4 py-3 text-xs text-gray-600 whitespace-nowrap">{tx.zone ?? '—'}</td>
                       <td className="px-4 py-3">{tx.role && <RoleBadge role={tx.role}/>}</td>
                       <td className="px-4 py-3 text-xs text-gray-500">{tx.mois ? fmtMois(tx.mois) : `#${tx.campagne_id}`}</td>
                       <td className="px-4 py-3"><TxBadge statut={tx.statut}/></td>

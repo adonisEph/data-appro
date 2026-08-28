@@ -17,6 +17,8 @@ const ROLE_INTERNAL_LABELS: Record<Role, string> = {
   responsable_senior: 'Resp. Sénior', manager: 'Manager',
 };
 
+const ZONES = ['BZV/POOL', 'PNR/KOUILOU', 'NORD', 'SUD'] as const;
+
 export default function AgentsPage() {
   const qc = useQueryClient();
   const fileRef = useRef<HTMLInputElement>(null);
@@ -54,6 +56,7 @@ export default function AgentsPage() {
   const [bulkSelected, setBulkSelected]   = useState<Set<number>>(new Set());
   const [bulkClient, setBulkClient]       = useState('');
   const [bulkZone, setBulkZone]           = useState('');
+  const [bulkQuotaFilter, setBulkQuotaFilter] = useState<number | null>(null);
 
   // Agents avec refetch auto
   const { data, isLoading, dataUpdatedAt } = useQuery({
@@ -207,6 +210,7 @@ export default function AgentsPage() {
       setBulkSelected(new Set());
       setBulkClient('');
       setBulkZone('');
+      setBulkQuotaFilter(null);
     },
     onError: (err: Error) => toast.error('Erreur', err.message),
   });
@@ -219,10 +223,10 @@ export default function AgentsPage() {
     });
   };
   const toggleBulkAll = () => {
-    if (bulkSelected.size === displayed.length) {
+    if (bulkSelected.size === bulkDisplayed.length) {
       setBulkSelected(new Set());
     } else {
-      setBulkSelected(new Set(displayed.map(a => a.id)));
+      setBulkSelected(new Set(bulkDisplayed.map(a => a.id)));
     }
   };
 
@@ -244,6 +248,7 @@ export default function AgentsPage() {
 
   const agents = data?.agents ?? [];
   const totalActive = data?.total_active ?? agents.length;
+  const existingClients = Array.from(new Set(agents.map(a => a.client).filter(Boolean))) as string[];
   const filtered = agents.filter(a => {
     const s = search.toLowerCase();
     const matchSearch = !search ||
@@ -273,6 +278,10 @@ export default function AgentsPage() {
     const bn = `${b.nom} ${b.prenom}`.trim().toLowerCase();
     return an.localeCompare(bn, 'fr');
   });
+
+  const bulkDisplayed = bulkQuotaFilter === null
+    ? displayed
+    : displayed.filter(a => a.quota_gb === bulkQuotaFilter);
 
   const exportExcel = () => {
     const rows = displayed.map(a => ({
@@ -456,7 +465,7 @@ export default function AgentsPage() {
   const lastUpdated = dataUpdatedAt ? new Date(dataUpdatedAt) : null;
 
   return (
-    <div className="p-4 md:p-6 max-w-6xl mx-auto space-y-4 md:space-y-6">
+    <div className="p-4 md:p-6 max-w-[1400px] mx-auto space-y-4 md:space-y-6">
       <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={handleFileChange}/>
 
       {/* Header */}
@@ -539,7 +548,7 @@ export default function AgentsPage() {
             <Button
               size="sm"
               variant="secondary"
-              onClick={() => { setBulkSelected(new Set()); setBulkAssignOpen(true); }}
+              onClick={() => { setBulkSelected(new Set()); setBulkQuotaFilter(null); setBulkAssignOpen(true); }}
               className="w-full sm:w-auto"
             >
               <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -857,15 +866,17 @@ export default function AgentsPage() {
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block text-xs font-medium text-gray-700 mb-1">Client</label>
-              <input type="text" value={form.client ?? ''} onChange={e => setForm(f => ({ ...f, client: e.target.value }))}
+              <input type="text" list="clients-list" value={form.client ?? ''} onChange={e => setForm(f => ({ ...f, client: e.target.value }))}
                 placeholder="ex: Divers client STHIC"
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"/>
             </div>
             <div>
               <label className="block text-xs font-medium text-gray-700 mb-1">Zone</label>
-              <input type="text" value={form.zone ?? ''} onChange={e => setForm(f => ({ ...f, zone: e.target.value }))}
-                placeholder="ex: Brazzaville, Pointe-Noire…"
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"/>
+              <select value={form.zone ?? ''} onChange={e => setForm(f => ({ ...f, zone: e.target.value || null }))}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+                <option value="">-- Aucune --</option>
+                {ZONES.map(z => <option key={z} value={z}>{z}</option>)}
+              </select>
             </div>
           </div>
 
@@ -1033,15 +1044,17 @@ export default function AgentsPage() {
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block text-xs font-medium text-gray-700 mb-1">Client</label>
-              <input type="text" value={form.client ?? ''} onChange={e => setForm(f => ({ ...f, client: e.target.value }))}
+              <input type="text" list="clients-list" value={form.client ?? ''} onChange={e => setForm(f => ({ ...f, client: e.target.value }))}
                 placeholder="ex: Divers client STHIC"
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"/>
             </div>
             <div>
               <label className="block text-xs font-medium text-gray-700 mb-1">Zone</label>
-              <input type="text" value={form.zone ?? ''} onChange={e => setForm(f => ({ ...f, zone: e.target.value }))}
-                placeholder="ex: Brazzaville, Pointe-Noire…"
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"/>
+              <select value={form.zone ?? ''} onChange={e => setForm(f => ({ ...f, zone: e.target.value || null }))}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+                <option value="">-- Aucune --</option>
+                {ZONES.map(z => <option key={z} value={z}>{z}</option>)}
+              </select>
             </div>
           </div>
 
@@ -1264,99 +1277,154 @@ export default function AgentsPage() {
       </Modal>
 
       {/* Modal Assignation en masse Client/Zone */}
-      <Modal open={bulkAssignOpen} onClose={() => setBulkAssignOpen(false)} title="Assigner Client / Zone en masse">
-        <div className="space-y-4">
+      <Modal open={bulkAssignOpen} onClose={() => setBulkAssignOpen(false)} title="Centre d'assignation Client / Zone" size="xl">
+        <div className="space-y-5">
           <p className="text-xs text-gray-500">
-            Cochez les agents à assigner, puis renseignez le client et/ou la zone. Seuls les champs remplis seront mis à jour.
+            Sélectionnez les agents par quota ou individuellement, puis assignez un client et/ou une zone. Seuls les champs renseignés seront mis à jour.
           </p>
 
-          {/* Sélection */}
-          <div className="border border-gray-200 rounded-xl overflow-hidden">
-            <div className="flex items-center justify-between px-3 py-2 bg-gray-50 border-b border-gray-100">
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={bulkSelected.size === displayed.length && displayed.length > 0}
-                  onChange={toggleBulkAll}
-                  className="w-4 h-4 rounded border-gray-300 text-brand-600 focus:ring-brand-500"
-                />
-                <span className="text-xs font-semibold text-gray-700">Tout sélectionner</span>
-              </label>
-              <span className="text-xs font-bold text-brand-600">{bulkSelected.size} sélectionné{bulkSelected.size > 1 ? 's' : ''}</span>
+          {/* Cartes quotas — filtrer par quota */}
+          <div>
+            <p className="text-xs font-semibold text-gray-600 uppercase tracking-wider mb-2">Filtrer par quota</p>
+            <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-2">
+              <button
+                onClick={() => setBulkQuotaFilter(null)}
+                className={`px-3 py-3 rounded-xl border-2 text-center transition-all ${bulkQuotaFilter === null ? 'border-brand-500 bg-brand-50 shadow-sm' : 'border-gray-200 bg-white hover:border-gray-300'}`}
+              >
+                <p className="text-sm font-bold text-gray-900">Tous</p>
+                <p className="text-[10px] text-gray-500 mt-0.5">{displayed.length} agents</p>
+              </button>
+              {quotaEntries.map(([quota, count]) => {
+                const gb = parseFloat(String(quota).replace('GB', ''));
+                const active = bulkQuotaFilter === gb;
+                return (
+                  <button
+                    key={quota}
+                    onClick={() => setBulkQuotaFilter(active ? null : gb)}
+                    className={`px-3 py-3 rounded-xl border-2 text-center transition-all ${active ? 'border-brand-500 bg-brand-50 shadow-sm' : 'border-gray-200 bg-white hover:border-gray-300'}`}
+                  >
+                    <p className="text-sm font-bold text-indigo-700">{quota}</p>
+                    <p className="text-[10px] text-gray-500 mt-0.5">{count} agents</p>
+                  </button>
+                );
+              })}
             </div>
-            <div className="max-h-64 overflow-y-auto divide-y divide-gray-50">
-              {displayed.map(agent => (
-                <label
-                  key={agent.id}
-                  className="flex items-center gap-3 px-3 py-2 hover:bg-gray-50 cursor-pointer"
-                >
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+            {/* Colonne gauche — Sélection des agents */}
+            <div className="lg:col-span-2">
+              <div className="border border-gray-200 rounded-xl overflow-hidden">
+                <div className="flex items-center justify-between px-3 py-2.5 bg-gray-50 border-b border-gray-100">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={bulkSelected.size === bulkDisplayed.length && bulkDisplayed.length > 0}
+                      onChange={() => {
+                        if (bulkSelected.size === bulkDisplayed.length) {
+                          setBulkSelected(new Set());
+                        } else {
+                          setBulkSelected(new Set(bulkDisplayed.map(a => a.id)));
+                        }
+                      }}
+                      className="w-4 h-4 rounded border-gray-300 text-brand-600 focus:ring-brand-500"
+                    />
+                    <span className="text-xs font-semibold text-gray-700">Tout sélectionner ({bulkDisplayed.length})</span>
+                  </label>
+                  <span className="text-xs font-bold text-brand-600">{bulkSelected.size} sélectionné{bulkSelected.size > 1 ? 's' : ''}</span>
+                </div>
+                <div className="max-h-80 overflow-y-auto divide-y divide-gray-50">
+                  {bulkDisplayed.map(agent => (
+                    <label
+                      key={agent.id}
+                      className="flex items-center gap-3 px-3 py-2 hover:bg-gray-50 cursor-pointer"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={bulkSelected.has(agent.id)}
+                        onChange={() => toggleBulk(agent.id)}
+                        className="w-4 h-4 rounded border-gray-300 text-brand-600 focus:ring-brand-500"
+                      />
+                      <div className="flex items-center gap-2 min-w-0 flex-1">
+                        <div className="w-6 h-6 bg-brand-100 rounded-full flex items-center justify-center text-brand-700 text-[10px] font-semibold shrink-0">
+                          {agent.prenom?.[0]?.toUpperCase()}{agent.nom?.[0]?.toUpperCase()}
+                        </div>
+                        <span className="text-sm text-gray-900 truncate">{agent.prenom} {agent.nom}</span>
+                        <span className="text-xs text-gray-400 font-mono shrink-0">{fmtTelephone(agent.telephone)}</span>
+                      </div>
+                      <span className="text-xs font-bold text-indigo-700 shrink-0">{agent.quota_gb} GB</span>
+                      <div className="flex gap-1 shrink-0">
+                        {agent.client && <span className="text-[10px] bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded">{agent.client}</span>}
+                        {agent.zone && <span className="text-[10px] bg-green-50 text-green-600 px-1.5 py-0.5 rounded">{agent.zone}</span>}
+                      </div>
+                    </label>
+                  ))}
+                  {bulkDisplayed.length === 0 && (
+                    <div className="px-3 py-8 text-center text-xs text-gray-400">Aucun agent dans ce quota</div>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Colonne droite — Assignation */}
+            <div className="space-y-4">
+              <div className="bg-gray-50 rounded-xl p-4 space-y-4">
+                <div>
+                  <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wider mb-2">Client</label>
                   <input
-                    type="checkbox"
-                    checked={bulkSelected.has(agent.id)}
-                    onChange={() => toggleBulk(agent.id)}
-                    className="w-4 h-4 rounded border-gray-300 text-brand-600 focus:ring-brand-500"
+                    type="text"
+                    list="clients-list"
+                    value={bulkClient}
+                    onChange={e => setBulkClient(e.target.value)}
+                    placeholder="Saisir ou choisir un client"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
                   />
-                  <div className="flex items-center gap-2 min-w-0 flex-1">
-                    <div className="w-6 h-6 bg-brand-100 rounded-full flex items-center justify-center text-brand-700 text-[10px] font-semibold shrink-0">
-                      {agent.prenom?.[0]?.toUpperCase()}{agent.nom?.[0]?.toUpperCase()}
-                    </div>
-                    <span className="text-sm text-gray-900 truncate">{agent.prenom} {agent.nom}</span>
-                    <span className="text-xs text-gray-400 font-mono shrink-0">{fmtTelephone(agent.telephone)}</span>
-                  </div>
-                  <div className="flex gap-1 shrink-0">
-                    {agent.client && <span className="text-[10px] bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded">{agent.client}</span>}
-                    {agent.zone && <span className="text-[10px] bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded">{agent.zone}</span>}
-                  </div>
-                </label>
-              ))}
-            </div>
-          </div>
+                  <p className="text-[10px] text-gray-400 mt-1">Laisser vide pour ne pas modifier</p>
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wider mb-2">Zone</label>
+                  <select
+                    value={bulkZone}
+                    onChange={e => setBulkZone(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
+                  >
+                    <option value="">-- Ne pas modifier --</option>
+                    {ZONES.map(z => <option key={z} value={z}>{z}</option>)}
+                  </select>
+                </div>
+              </div>
 
-          {/* Champs Client / Zone */}
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">Client</label>
-              <input
-                type="text"
-                value={bulkClient}
-                onChange={e => setBulkClient(e.target.value)}
-                placeholder="ex: Divers client STHIC"
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
-              />
-              <p className="text-[10px] text-gray-400 mt-1">Laisser vide pour ne pas modifier</p>
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">Zone</label>
-              <input
-                type="text"
-                value={bulkZone}
-                onChange={e => setBulkZone(e.target.value)}
-                placeholder="ex: Brazzaville, Pointe-Noire…"
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
-              />
-              <p className="text-[10px] text-gray-400 mt-1">Laisser vide pour ne pas modifier</p>
-            </div>
-          </div>
+              <div className="bg-brand-50 rounded-xl p-4">
+                <p className="text-xs text-brand-700 mb-1">Rappel : une zone peut avoir un ou plusieurs clients.</p>
+                <p className="text-[10px] text-gray-400">Ex: BZV/POOL → Client A, Client B, Client C…</p>
+              </div>
 
-          <div className="flex justify-end gap-3 pt-2">
-            <Button variant="secondary" onClick={() => setBulkAssignOpen(false)}>Annuler</Button>
-            <Button
-              loading={bulkAssignMut.isPending}
-              disabled={bulkSelected.size === 0 || (!bulkClient.trim() && !bulkZone.trim())}
-              onClick={() => {
-                const payload: { agent_ids: number[]; client?: string | null; zone?: string | null } = {
-                  agent_ids: Array.from(bulkSelected),
-                };
-                if (bulkClient.trim()) payload.client = bulkClient.trim();
-                if (bulkZone.trim()) payload.zone = bulkZone.trim();
-                bulkAssignMut.mutate(payload);
-              }}
-            >
-              Assigner à {bulkSelected.size} agent{bulkSelected.size > 1 ? 's' : ''}
-            </Button>
+              <div className="space-y-2">
+                <Button
+                  className="w-full"
+                  loading={bulkAssignMut.isPending}
+                  disabled={bulkSelected.size === 0 || (!bulkClient.trim() && !bulkZone.trim())}
+                  onClick={() => {
+                    const payload: { agent_ids: number[]; client?: string | null; zone?: string | null } = {
+                      agent_ids: Array.from(bulkSelected),
+                    };
+                    if (bulkClient.trim()) payload.client = bulkClient.trim();
+                    if (bulkZone.trim()) payload.zone = bulkZone.trim();
+                    bulkAssignMut.mutate(payload);
+                  }}
+                >
+                  Assigner à {bulkSelected.size} agent{bulkSelected.size > 1 ? 's' : ''}
+                </Button>
+                <Button variant="secondary" className="w-full" onClick={() => setBulkAssignOpen(false)}>Annuler</Button>
+              </div>
+            </div>
           </div>
         </div>
       </Modal>
+
+      <datalist id="clients-list">
+        {existingClients.map(c => <option key={c} value={c} />)}
+      </datalist>
     </div>
   );
 }

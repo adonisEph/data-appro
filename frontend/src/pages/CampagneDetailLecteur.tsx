@@ -33,7 +33,7 @@ export default function CampagneDetailLecteurPage() {
   const budgetRestant = Math.max(0, (campagne.budget_fcfa || 0) - budgetConfirme);
 
   return (
-    <div className="p-4 md:p-6 max-w-5xl mx-auto space-y-5">
+    <div className="p-4 md:p-6 max-w-[1400px] mx-auto space-y-5">
       {/* Header */}
       <div className="flex items-center gap-3">
         <Link to="/campagnes-viewer" className="text-gray-400 hover:text-gray-600">
@@ -102,6 +102,8 @@ export default function CampagneDetailLecteurPage() {
                   <tr className="border-b border-gray-100">
                     <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Agent</th>
                     <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Téléphone</th>
+                    <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Client</th>
+                    <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Zone</th>
                     <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Poste</th>
                     <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Statut</th>
                     <th className="text-right px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Montant</th>
@@ -112,6 +114,8 @@ export default function CampagneDetailLecteurPage() {
                     <tr key={tx.id} className="hover:bg-gray-50">
                       <td className="px-4 py-3 font-medium text-gray-900">{tx.prenom} {tx.nom}</td>
                       <td className="px-4 py-3 font-mono text-xs text-gray-600">{fmtTelephone(tx.telephone)}</td>
+                      <td className="px-4 py-3 text-xs text-gray-600 whitespace-nowrap">{tx.client ?? '—'}</td>
+                      <td className="px-4 py-3 text-xs text-gray-600 whitespace-nowrap">{tx.zone ?? '—'}</td>
                       <td className="px-4 py-3 text-xs text-gray-500">{tx.role_label ?? tx.role ?? '—'}</td>
                       <td className="px-4 py-3"><TxBadge statut={tx.statut}/></td>
                       <td className="px-4 py-3 text-right font-semibold text-gray-900">

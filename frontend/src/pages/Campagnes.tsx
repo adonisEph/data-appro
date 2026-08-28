@@ -15,6 +15,8 @@ import { fmtFCFA, fmtMois, fmtTelephone, fmtPct, cleanTel } from '../lib/utils';
 import * as XLSX from 'xlsx';
 import { ROLE_QUOTAS } from '../types';
 
+const ZONES = ['BZV/POOL', 'PNR/KOUILOU', 'NORD', 'SUD'] as const;
+
 // ══════════════════════════════════════════════════════════
 // Liste des campagnes
 // ══════════════════════════════════════════════════════════
@@ -208,6 +210,8 @@ export function CampagneDetailPage() {
   const [manualSearch, setManualSearch] = useState('');
   const [manualSort, setManualSort] = useState<'quota' | 'montant'>('montant');
   const [manualSortDir, setManualSortDir] = useState<'asc' | 'desc'>('desc');
+  const [manualFilterZone, setManualFilterZone] = useState('');
+  const [manualFilterClient, setManualFilterClient] = useState('');
   const [manualModal, setManualModal] = useState<null | {
     agent_id: number;
     agent_label: string;
@@ -432,6 +436,8 @@ export function CampagneDetailPage() {
 
   const manualRows = manualRowsAll.filter(row => {
     if (todoOnly && row.statut !== 'en_attente') return false;
+    if (manualFilterZone && row.a.zone !== manualFilterZone) return false;
+    if (manualFilterClient && row.a.client !== manualFilterClient) return false;
     if (manualSearch.trim()) {
       const q = manualSearch.toLowerCase().trim();
       const name = `${row.a.prenom ?? ''} ${row.a.nom ?? ''}`.toLowerCase();
@@ -465,7 +471,7 @@ export function CampagneDetailPage() {
   const budgetUtilise = Math.max(0, budgetTotal - budgetRestant);
 
   return (
-    <div className="p-6 max-w-6xl mx-auto space-y-6">
+    <div className="p-6 max-w-[1400px] mx-auto space-y-6">
       {/* Confirm lancer */}
       <ConfirmModal
         open={confirmLancer}
@@ -685,6 +691,27 @@ export function CampagneDetailPage() {
               </select>
             </div>
 
+            <div className="flex items-center gap-2">
+              <select
+                value={manualFilterZone}
+                onChange={e => setManualFilterZone(e.target.value)}
+                className="px-2 py-1 border border-gray-300 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-brand-500"
+              >
+                <option value="">Toutes zones</option>
+                {ZONES.map(z => <option key={z} value={z}>{z}</option>)}
+              </select>
+              <select
+                value={manualFilterClient}
+                onChange={e => setManualFilterClient(e.target.value)}
+                className="px-2 py-1 border border-gray-300 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-brand-500"
+              >
+                <option value="">Tous clients</option>
+                {Array.from(new Set((agentsData?.agents ?? []).map(a => a.client).filter(Boolean))).map(c => (
+                  <option key={c} value={c as string}>{c as string}</option>
+                ))}
+              </select>
+            </div>
+
             <div className="ml-auto text-xs text-gray-500">
               {manualRows.length} agent(s)
             </div>
@@ -696,6 +723,8 @@ export function CampagneDetailPage() {
                 <tr className="border-b border-gray-100">
                   <th className="text-left px-3 py-2 text-xs font-semibold text-gray-500 uppercase">Agent</th>
                   <th className="text-left px-3 py-2 text-xs font-semibold text-gray-500 uppercase">Téléphone</th>
+                  <th className="text-left px-3 py-2 text-xs font-semibold text-gray-500 uppercase">Client</th>
+                  <th className="text-left px-3 py-2 text-xs font-semibold text-gray-500 uppercase">Zone</th>
                   <th className="text-right px-3 py-2 text-xs font-semibold text-gray-500 uppercase">Quota</th>
                   <th className="text-right px-3 py-2 text-xs font-semibold text-gray-500 uppercase">Montant</th>
                   <th className="text-left px-3 py-2 text-xs font-semibold text-gray-500 uppercase">Statut</th>
@@ -737,6 +766,8 @@ export function CampagneDetailPage() {
                           </button>
                         </div>
                       </td>
+                      <td className="px-3 py-2 text-xs text-gray-600 whitespace-nowrap">{a.client ?? '—'}</td>
+                      <td className="px-3 py-2 text-xs text-gray-600 whitespace-nowrap">{a.zone ?? '—'}</td>
                       <td className="px-3 py-2 text-right font-semibold text-indigo-700">{a.quota_gb} GB</td>
                       <td className="px-3 py-2 text-right text-gray-700">
                         <div className="flex items-center justify-end gap-2">
@@ -1073,6 +1104,8 @@ export function CampagneDetailPage() {
                 <tr className="border-b border-gray-100">
                   <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Agent</th>
                   <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Téléphone</th>
+                  <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Client</th>
+                  <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Zone</th>
                   <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Rôle</th>
                   <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Option</th>
                   <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Statut</th>
@@ -1084,6 +1117,8 @@ export function CampagneDetailPage() {
                   <tr key={tx.id} className="hover:bg-gray-50">
                     <td className="px-4 py-3 font-medium text-gray-900">{tx.prenom} {tx.nom}</td>
                     <td className="px-4 py-3 font-mono text-xs text-gray-600">{cleanTel(tx.telephone)}</td>
+                    <td className="px-4 py-3 text-xs text-gray-600 whitespace-nowrap">{tx.client ?? '—'}</td>
+                    <td className="px-4 py-3 text-xs text-gray-600 whitespace-nowrap">{tx.zone ?? '—'}</td>
                     <td className="px-4 py-3">{tx.role && <RoleBadge role={tx.role} />}</td>
                     <td className="px-4 py-3">
                       <span className="text-xs text-gray-600 uppercase">{tx.option_used}</span>

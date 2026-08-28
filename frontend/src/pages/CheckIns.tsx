@@ -62,7 +62,7 @@ export default function CheckInsPage() {
   );
 
   return (
-    <div className="p-4 md:p-6 max-w-5xl mx-auto space-y-5">
+    <div className="p-4 md:p-6 max-w-[1400px] mx-auto space-y-5">
       {/* Header avec gradient */}
       <div className="bg-gradient-to-r from-brand-600 via-indigo-600 to-indigo-700 rounded-2xl px-6 py-5 text-white shadow-lg shadow-indigo-200/50">
         <div className="flex items-center justify-between flex-wrap gap-3">
@@ -190,6 +190,8 @@ export default function CheckInsPage() {
                 <tr className="bg-gray-50/80 border-b border-gray-100">
                   <th className="text-left px-4 py-3.5 text-[10px] font-bold text-gray-500 uppercase tracking-wide whitespace-nowrap">Agent</th>
                   <th className="text-left px-4 py-3.5 text-[10px] font-bold text-gray-500 uppercase tracking-wide whitespace-nowrap">Téléphone</th>
+                  <th className="text-left px-4 py-3.5 text-[10px] font-bold text-gray-500 uppercase tracking-wide whitespace-nowrap">Client</th>
+                  <th className="text-left px-4 py-3.5 text-[10px] font-bold text-gray-500 uppercase tracking-wide whitespace-nowrap">Zone</th>
                   <th className="text-center px-4 py-3.5 text-[10px] font-bold text-gray-500 uppercase tracking-wide whitespace-nowrap">Quota</th>
                   <th className="text-left px-4 py-3.5 text-[10px] font-bold text-gray-500 uppercase tracking-wide whitespace-nowrap">Rôle</th>
                   <th className="text-left px-4 py-3.5 text-[10px] font-bold text-gray-500 uppercase tracking-wide whitespace-nowrap">IP</th>
@@ -211,6 +213,8 @@ export default function CheckInsPage() {
                       </div>
                     </td>
                     <td className="px-4 py-3.5 text-sm text-gray-700 font-mono whitespace-nowrap">{ci.telephone}</td>
+                    <td className="px-4 py-3.5 text-xs text-gray-600 whitespace-nowrap">{ci.client ?? '—'}</td>
+                    <td className="px-4 py-3.5 text-xs text-gray-600 whitespace-nowrap">{ci.zone ?? '—'}</td>
                     <td className="px-4 py-3.5 text-center whitespace-nowrap">
                       <span className="text-xs font-bold bg-indigo-50 text-indigo-700 px-2.5 py-1 rounded-lg whitespace-nowrap">
                         {ci.quota_gb} GB

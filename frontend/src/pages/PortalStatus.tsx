@@ -4,7 +4,7 @@ import { portalApi } from '../lib/api';
 import { usePWA } from '../hooks/usePWA';
 
 interface PortalStatus {
-  agent: { id: number; nom: string; prenom: string; telephone: string; quota_gb: number; role_label: string | null };
+  agent: { id: number; nom: string; prenom: string; telephone: string; quota_gb: number; role_label: string | null; client: string | null; zone: string | null };
   derniere_campagne: { id: number; mois: string; statut: string; option_envoi: string; lance_le: string | null; termine_le: string | null } | null;
   transaction: { statut: string; option_used: string; montant_fcfa: number | null; airtel_message: string | null; airtel_reference: string | null; tente_le: string; confirme_le: string | null; nb_tentatives: number } | null;
   historique_recent: Array<{ campagne_id: number; mois: string; statut: string; option_used: string; montant_fcfa: number | null; airtel_message: string | null; confirme_le: string | null }>;
@@ -172,9 +172,11 @@ export default function PortalStatus() {
             </div>
           </div>
           {agent.role_label && (
-            <div className="flex items-center gap-2 mt-3">
+            <div className="flex items-center gap-2 mt-3 flex-wrap">
               <span className="text-xs bg-white/15 backdrop-blur-sm px-2.5 py-1 rounded-full">{agent.role_label}</span>
               <span className="text-xs bg-white/15 backdrop-blur-sm px-2.5 py-1 rounded-full">{agent.quota_gb} GB</span>
+              {agent.client && <span className="text-xs bg-white/15 backdrop-blur-sm px-2.5 py-1 rounded-full">👤 {agent.client}</span>}
+              {agent.zone && <span className="text-xs bg-white/15 backdrop-blur-sm px-2.5 py-1 rounded-full">📍 {agent.zone}</span>}
             </div>
           )}
         </div>
