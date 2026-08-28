@@ -174,33 +174,75 @@ export default function UtilisateursPage() {
     (agents ?? []).map(a => [a.id, { id: a.id, nom: a.nom, prenom: a.prenom, telephone: a.telephone }])
   );
 
+  const activeCount = users.filter(u => u.actif).length;
+  const superAdminCount = users.filter(u => u.is_super_admin).length;
+  const assistantCount = users.filter(u => u.can_provision && !u.is_super_admin && !u.is_viewer).length;
+
   return (
-    <div className="p-6 max-w-5xl mx-auto space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Utilisateurs</h1>
-          <p className="text-sm text-gray-500 mt-0.5">Gestion des responsables Data Appro</p>
+    <div className="p-4 md:p-6 max-w-6xl mx-auto space-y-5">
+      {/* Header avec gradient */}
+      <div className="bg-gradient-to-r from-brand-600 via-indigo-600 to-indigo-700 rounded-2xl px-6 py-5 text-white shadow-lg shadow-indigo-200/50">
+        <div className="flex items-center justify-between flex-wrap gap-3">
+          <div className="flex items-center gap-3">
+            <div className="w-12 h-12 bg-white/20 backdrop-blur-sm rounded-2xl flex items-center justify-center shrink-0">
+              <svg className="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/>
+              </svg>
+            </div>
+            <div>
+              <h1 className="text-xl md:text-2xl font-bold">Utilisateurs</h1>
+              <p className="text-sm text-white/70 mt-0.5">Gestion des responsables Data Appro</p>
+            </div>
+          </div>
+          <button
+            onClick={() => setCreateModal(true)}
+            className="inline-flex items-center gap-2 bg-white text-brand-700 hover:bg-white/90 font-semibold text-sm px-4 py-2.5 rounded-xl transition-colors shadow-lg"
+          >
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4"/>
+            </svg>
+            Ajouter un utilisateur
+          </button>
         </div>
-        <Button size="sm" onClick={() => setCreateModal(true)}>
-          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4"/>
-          </svg>
-          Ajouter un utilisateur
-        </Button>
+      </div>
+
+      {/* Stat cards */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <div className="bg-white rounded-2xl border border-gray-100 p-4 shadow-sm">
+          <p className="text-2xl font-black text-gray-900">{users.length}</p>
+          <p className="text-xs text-gray-500 mt-0.5">Total utilisateurs</p>
+        </div>
+        <div className="bg-white rounded-2xl border border-gray-100 p-4 shadow-sm">
+          <p className="text-2xl font-black text-green-600">{activeCount}</p>
+          <p className="text-xs text-gray-500 mt-0.5">Actifs</p>
+        </div>
+        <div className="bg-white rounded-2xl border border-gray-100 p-4 shadow-sm">
+          <p className="text-2xl font-black text-amber-600">{superAdminCount}</p>
+          <p className="text-xs text-gray-500 mt-0.5">Super Admins</p>
+        </div>
+        <div className="bg-white rounded-2xl border border-gray-100 p-4 shadow-sm">
+          <p className="text-2xl font-black text-indigo-600">{assistantCount}</p>
+          <p className="text-xs text-gray-500 mt-0.5">Assistants-Appro</p>
+        </div>
       </div>
 
       {/* Alerte super admin */}
-      <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 flex gap-3">
-        <svg className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
-        </svg>
-        <p className="text-sm text-amber-800">
-          <strong>Zone Super Admin.</strong> Seul toi ({currentUser?.email}) as accès à cette page.
-          Les utilisateurs que tu crées pourront se connecter avec les droits que tu définis.
-        </p>
+      <div className="bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200 rounded-2xl px-5 py-4 flex gap-3">
+        <div className="w-10 h-10 bg-amber-100 rounded-xl flex items-center justify-center shrink-0">
+          <svg className="w-5 h-5 text-amber-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+          </svg>
+        </div>
+        <div className="flex-1">
+          <p className="text-sm font-bold text-amber-900">Zone Super Admin</p>
+          <p className="text-sm text-amber-700 mt-0.5">
+            Seul toi ({currentUser?.email}) as accès à cette page.
+            Les utilisateurs que tu crées pourront se connecter avec les droits que tu définis.
+          </p>
+        </div>
       </div>
 
-      <Card>
+      <Card className="overflow-hidden">
         {isLoading ? (
           <div className="flex justify-center py-12"><Spinner size="lg" className="text-brand-600"/></div>
         ) : users.length === 0 ? (
@@ -210,40 +252,42 @@ export default function UtilisateursPage() {
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-gray-100">
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Utilisateur</th>
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Agent lié</th>
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Poste</th>
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Droits</th>
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Statut</th>
-                  <th className="text-right px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Actions</th>
+                <tr className="bg-gray-50/80 border-b border-gray-100">
+                  <th className="text-left px-4 py-3.5 text-[10px] font-bold text-gray-500 uppercase tracking-wide">Utilisateur</th>
+                  <th className="text-left px-4 py-3.5 text-[10px] font-bold text-gray-500 uppercase tracking-wide">Agent lié</th>
+                  <th className="text-left px-4 py-3.5 text-[10px] font-bold text-gray-500 uppercase tracking-wide">Poste</th>
+                  <th className="text-left px-4 py-3.5 text-[10px] font-bold text-gray-500 uppercase tracking-wide">Droits</th>
+                  <th className="text-left px-4 py-3.5 text-[10px] font-bold text-gray-500 uppercase tracking-wide">Statut</th>
+                  <th className="text-right px-4 py-3.5 text-[10px] font-bold text-gray-500 uppercase tracking-wide">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">
                 {users.map(u => {
                   const isMe = u.email === currentUser?.email;
                   return (
-                    <tr key={u.id} className="hover:bg-gray-50">
-                      <td className="px-4 py-3">
+                    <tr key={u.id} className="hover:bg-gray-50/50 transition-colors">
+                      <td className="px-4 py-3.5">
                         <div className="flex items-center gap-3">
-                          <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold shrink-0 ${
-                            u.is_super_admin ? 'bg-amber-100 text-amber-700' : 'bg-brand-100 text-brand-700'
+                          <div className={`w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold shrink-0 ${
+                            u.is_super_admin ? 'bg-amber-100 text-amber-700' : u.is_viewer ? 'bg-gray-100 text-gray-600' : 'bg-brand-100 text-brand-700'
                           }`}>
                             {u.prenom?.[0]?.toUpperCase()}{u.nom?.[0]?.toUpperCase()}
                           </div>
-                          <div>
-                            <p className="font-medium text-gray-900">
-                              {u.prenom} {u.nom}
-                              {isMe && <span className="ml-2 text-xs bg-brand-100 text-brand-700 px-2 py-0.5 rounded-full">Vous</span>}
-                              {u.is_super_admin && <span className="ml-2 text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full">Super Admin</span>}
-                              {u.is_viewer && <span className="ml-2 text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">Lecteur</span>}
-                              {u.can_provision && !u.is_super_admin && !u.is_viewer && <span className="ml-2 text-xs bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded-full">Assistant-Appro</span>}
-                            </p>
-                            <p className="text-xs text-gray-500">{u.email}</p>
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <p className="font-semibold text-gray-900">
+                                {u.prenom} {u.nom}
+                              </p>
+                              {isMe && <span className="text-[10px] font-bold bg-brand-100 text-brand-700 px-2 py-0.5 rounded-full">Vous</span>}
+                              {u.is_super_admin && <span className="text-[10px] font-bold bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full">★ Admin</span>}
+                              {u.is_viewer && <span className="text-[10px] font-bold bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">Lecteur</span>}
+                              {u.can_provision && !u.is_super_admin && !u.is_viewer && <span className="text-[10px] font-bold bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded-full">Assistant</span>}
+                            </div>
+                            <p className="text-xs text-gray-500 mt-0.5">{u.email}</p>
                           </div>
                         </div>
                       </td>
-                      <td className="px-4 py-3">
+                      <td className="px-4 py-3.5">
                         {typeof u.agent_id === 'number' ? (() => {
                           const a = agentById.get(u.agent_id);
                           if (!a) return <span className="text-xs text-gray-400">#{u.agent_id}</span>;
@@ -257,60 +301,61 @@ export default function UtilisateursPage() {
                           <span className="text-xs text-gray-400">—</span>
                         )}
                       </td>
-                      <td className="px-4 py-3">
+                      <td className="px-4 py-3.5">
                         {u.role_label ? (
-                          <span className="text-xs bg-gray-100 text-gray-700 px-2 py-0.5 rounded-full">{u.role_label}</span>
+                          <span className="text-xs bg-gray-100 text-gray-700 px-2.5 py-1 rounded-full font-medium">{u.role_label}</span>
                         ) : (
                           u.role && <RoleBadge role={u.role}/>
                         )}
                       </td>
-                      <td className="px-4 py-3">
+                      <td className="px-4 py-3.5">
                         <div className="flex flex-wrap gap-1">
                           {Object.entries(DROITS_LABELS).map(([key, label]) => (
                             (u as unknown as Record<string, boolean>)[key] && (
-                              <span key={key} className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">
+                              <span key={key} className="text-[10px] font-medium bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded-full">
                                 {label.split(' ')[0]}
                               </span>
                             )
                           ))}
                         </div>
                       </td>
-                      <td className="px-4 py-3">
-                        <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${
+                      <td className="px-4 py-3.5">
+                        <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold ${
                           u.actif ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'
                         }`}>
+                          <span className={`w-1.5 h-1.5 rounded-full ${u.actif ? 'bg-green-500' : 'bg-gray-400'}`} />
                           {u.actif ? 'Actif' : 'Inactif'}
                         </span>
                       </td>
-                      <td className="px-4 py-3 text-right">
+                      <td className="px-4 py-3.5 text-right">
                         {!isMe && (
-                          <div className="flex items-center justify-end gap-2">
+                          <div className="flex items-center justify-end gap-1.5">
                             <button onClick={() => openEdit(u)}
-                              className="text-brand-600 hover:text-brand-800 text-xs font-medium px-2 py-1 rounded hover:bg-brand-50">
+                              className="text-brand-600 hover:text-brand-800 text-xs font-semibold px-2.5 py-1.5 rounded-lg hover:bg-brand-50 transition-colors">
                               Droits
                             </button>
                             {u.can_provision && !u.is_super_admin && !u.is_viewer && (
                               <button onClick={() => openAssign(u)}
-                                className="text-indigo-600 hover:text-indigo-800 text-xs font-medium px-2 py-1 rounded hover:bg-indigo-50">
+                                className="text-indigo-600 hover:text-indigo-800 text-xs font-semibold px-2.5 py-1.5 rounded-lg hover:bg-indigo-50 transition-colors">
                                 Assigner
                               </button>
                             )}
                             <button onClick={() => setForceLogoutUser(u)}
-                              className="text-gray-500 hover:text-gray-700 text-xs font-medium px-2 py-1 rounded hover:bg-gray-100">
+                              className="text-gray-500 hover:text-gray-700 text-xs font-semibold px-2.5 py-1.5 rounded-lg hover:bg-gray-100 transition-colors">
                               Déconnecter
                             </button>
                             <button onClick={() => { setResetUser(u); setNewPassword(''); }}
-                              className="text-gray-500 hover:text-gray-700 text-xs font-medium px-2 py-1 rounded hover:bg-gray-100">
+                              className="text-gray-500 hover:text-gray-700 text-xs font-semibold px-2.5 py-1.5 rounded-lg hover:bg-gray-100 transition-colors">
                               MDP
                             </button>
                             {u.actif ? (
                               <button onClick={() => setDeleteUser(u)}
-                                className="text-red-500 hover:text-red-700 text-xs font-medium px-2 py-1 rounded hover:bg-red-50">
+                                className="text-red-500 hover:text-red-700 text-xs font-semibold px-2.5 py-1.5 rounded-lg hover:bg-red-50 transition-colors">
                                 Désactiver
                               </button>
                             ) : (
                               <button onClick={() => setReactivateUser(u)}
-                                className="text-green-600 hover:text-green-800 text-xs font-medium px-2 py-1 rounded hover:bg-green-50">
+                                className="text-green-600 hover:text-green-800 text-xs font-semibold px-2.5 py-1.5 rounded-lg hover:bg-green-50 transition-colors">
                                 Réactiver
                               </button>
                             )}

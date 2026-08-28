@@ -738,54 +738,76 @@ export function Layout() {
 
             {journalOpen && (
               <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4">
-                <button className="absolute inset-0 bg-black/40" onClick={() => setJournalOpen(false)} aria-label="Fermer" />
-                <div className="relative w-full max-w-4xl bg-white border border-gray-200 rounded-2xl shadow-xl overflow-hidden">
-                  <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
-                    <div>
-                      <p className="text-sm font-semibold text-gray-800">Journal des actions</p>
-                      <p className="text-xs text-gray-400">Historique des actions des responsables</p>
+                <button className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setJournalOpen(false)} aria-label="Fermer" />
+                <div className="relative w-full max-w-4xl bg-white rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+                  {/* Header avec gradient */}
+                  <div className="bg-gradient-to-r from-gray-800 via-gray-900 to-black px-5 py-4 flex items-center justify-between shrink-0">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 bg-white/10 backdrop-blur-sm rounded-xl flex items-center justify-center shrink-0">
+                        <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+                        </svg>
+                      </div>
+                      <div>
+                        <p className="text-sm font-bold text-white">Journal des actions</p>
+                        <p className="text-xs text-white/60">Historique des actions des responsables</p>
+                      </div>
                     </div>
-                    <button onClick={() => setJournalOpen(false)} className="text-gray-400 hover:text-gray-700 p-1" title="Fermer">
+                    <button onClick={() => setJournalOpen(false)} className="w-8 h-8 rounded-lg text-white/80 hover:text-white hover:bg-white/10 flex items-center justify-center transition-colors" title="Fermer">
                       <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                       </svg>
                     </button>
                   </div>
 
-                  <div className="px-4 py-3 border-b border-gray-100">
+                  {/* Filtres modernes */}
+                  <div className="px-5 py-4 border-b border-gray-100 shrink-0">
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2">
-                      <input
-                        type="datetime-local"
-                        value={journalFilters.from ?? ''}
-                        onChange={e => setJournalFilters(f => ({ ...f, from: e.target.value }))}
-                        className="border border-gray-200 rounded-lg px-3 py-2 text-xs"
-                        placeholder="Du"
-                      />
-                      <input
-                        type="datetime-local"
-                        value={journalFilters.to ?? ''}
-                        onChange={e => setJournalFilters(f => ({ ...f, to: e.target.value }))}
-                        className="border border-gray-200 rounded-lg px-3 py-2 text-xs"
-                        placeholder="Au"
-                      />
-                      <input
-                        value={journalFilters.email ?? ''}
-                        onChange={e => setJournalFilters(f => ({ ...f, email: e.target.value }))}
-                        className="border border-gray-200 rounded-lg px-3 py-2 text-xs"
-                        placeholder="Email responsable"
-                      />
-                      <input
-                        value={journalFilters.action ?? ''}
-                        onChange={e => setJournalFilters(f => ({ ...f, action: e.target.value }))}
-                        className="border border-gray-200 rounded-lg px-3 py-2 text-xs"
-                        placeholder="Action (ex: AGENT_CREATED)"
-                      />
-                      <input
-                        value={journalFilters.q ?? ''}
-                        onChange={e => setJournalFilters(f => ({ ...f, q: e.target.value }))}
-                        className="border border-gray-200 rounded-lg px-3 py-2 text-xs"
-                        placeholder="Recherche"
-                      />
+                      <div>
+                        <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-wide mb-1">Du</label>
+                        <input
+                          type="datetime-local"
+                          value={journalFilters.from ?? ''}
+                          onChange={e => setJournalFilters(f => ({ ...f, from: e.target.value }))}
+                          className="w-full border border-gray-200 rounded-xl px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-wide mb-1">Au</label>
+                        <input
+                          type="datetime-local"
+                          value={journalFilters.to ?? ''}
+                          onChange={e => setJournalFilters(f => ({ ...f, to: e.target.value }))}
+                          className="w-full border border-gray-200 rounded-xl px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-wide mb-1">Email</label>
+                        <input
+                          value={journalFilters.email ?? ''}
+                          onChange={e => setJournalFilters(f => ({ ...f, email: e.target.value }))}
+                          placeholder="user@domaine.com"
+                          className="w-full border border-gray-200 rounded-xl px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-wide mb-1">Action</label>
+                        <input
+                          value={journalFilters.action ?? ''}
+                          onChange={e => setJournalFilters(f => ({ ...f, action: e.target.value }))}
+                          placeholder="AGENT_CREATED…"
+                          className="w-full border border-gray-200 rounded-xl px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-wide mb-1">Recherche</label>
+                        <input
+                          value={journalFilters.q ?? ''}
+                          onChange={e => setJournalFilters(f => ({ ...f, q: e.target.value }))}
+                          placeholder="Texte libre…"
+                          className="w-full border border-gray-200 rounded-xl px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent"
+                        />
+                      </div>
                     </div>
 
                     <div className="flex items-center justify-between gap-2 pt-3">
@@ -793,15 +815,20 @@ export function Layout() {
                         <button
                           onClick={() => runJournalSearch({ resetOffset: true })}
                           disabled={journalLoading}
-                          className="px-3 py-2 text-xs font-semibold rounded-lg bg-brand-600 text-white hover:bg-brand-700 disabled:opacity-60"
+                          className="px-4 py-2 text-xs font-semibold rounded-xl bg-brand-600 text-white hover:bg-brand-700 disabled:opacity-60 transition-colors flex items-center gap-1.5"
                         >
-                          {journalLoading ? 'Chargement…' : 'Rechercher'}
+                          {journalLoading ? (
+                            <><span className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin" /> Chargement…</>
+                          ) : (
+                            <><svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg> Rechercher</>
+                          )}
                         </button>
                         <button
                           onClick={exportJournalXlsx}
                           disabled={journalLoading}
-                          className="px-3 py-2 text-xs font-semibold rounded-lg bg-gray-900 text-white hover:bg-black disabled:opacity-60"
+                          className="px-4 py-2 text-xs font-semibold rounded-xl bg-gray-900 text-white hover:bg-black disabled:opacity-60 transition-colors flex items-center gap-1.5"
                         >
+                          <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
                           Export Excel
                         </button>
                       </div>
@@ -812,9 +839,9 @@ export function Layout() {
                             setJournalOffset(next);
                           }}
                           disabled={journalLoading || journalOffset === 0}
-                          className="px-3 py-2 text-xs font-semibold rounded-lg bg-white border border-gray-200 text-gray-700 hover:bg-gray-50 disabled:opacity-60"
+                          className="px-3 py-2 text-xs font-semibold rounded-xl bg-white border border-gray-200 text-gray-700 hover:bg-gray-50 disabled:opacity-60 transition-colors"
                         >
-                          Précédent
+                          ← Précédent
                         </button>
                         <button
                           onClick={() => {
@@ -822,40 +849,54 @@ export function Layout() {
                             setJournalOffset(next);
                           }}
                           disabled={journalLoading || journalLogs.length < (journalFilters.limit ?? 50)}
-                          className="px-3 py-2 text-xs font-semibold rounded-lg bg-white border border-gray-200 text-gray-700 hover:bg-gray-50 disabled:opacity-60"
+                          className="px-3 py-2 text-xs font-semibold rounded-xl bg-white border border-gray-200 text-gray-700 hover:bg-gray-50 disabled:opacity-60 transition-colors"
                         >
-                          Suivant
+                          Suivant →
                         </button>
                       </div>
                     </div>
                   </div>
 
-                  <div className="max-h-[70vh] overflow-y-auto">
+                  {/* Résultats */}
+                  <div className="flex-1 overflow-y-auto px-5 py-3">
                     {journalLogs.length === 0 ? (
-                      <p className="text-sm text-gray-400 p-4">Aucune entrée</p>
+                      <div className="flex flex-col items-center justify-center py-12">
+                        <div className="w-14 h-14 bg-gray-100 rounded-full flex items-center justify-center mb-3">
+                          <svg className="w-7 h-7 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" /></svg>
+                        </div>
+                        <p className="text-sm text-gray-400">Aucune entrée</p>
+                      </div>
                     ) : (
-                      <div className="divide-y divide-gray-100">
+                      <div className="space-y-2">
                         {journalLogs.map(l => {
                           const details = safeJsonParse<Record<string, unknown>>(l.details) ?? null;
                           const agent = [l.agent_prenom, l.agent_nom].filter(Boolean).join(' ').trim();
                           const msg = fmtJournalMessage(l.action, details) ?? fmtFallbackMessage(l.action, details, l.details, l.agent_id ?? null, l.campagne_id ?? null);
+                          const actionColor = l.action.includes('CREATED') ? 'bg-green-100 text-green-700' :
+                            l.action.includes('UPDATED') || l.action.includes('CHANGED') ? 'bg-blue-100 text-blue-700' :
+                            l.action.includes('DELETED') || l.action.includes('REMOVED') ? 'bg-red-100 text-red-700' :
+                            l.action.includes('LAUNCH') || l.action.includes('CAMPAGNE') ? 'bg-amber-100 text-amber-700' :
+                            'bg-gray-100 text-gray-600';
                           return (
-                            <div key={l.id} className="px-4 py-3">
-                              <div className="flex items-start justify-between gap-3">
-                                <div className="min-w-0">
+                            <div key={l.id} className="flex items-start gap-3 p-3 rounded-xl border border-gray-100 hover:border-gray-200 hover:bg-gray-50/50 transition-colors">
+                              <div className="w-8 h-8 rounded-lg flex items-center justify-center text-[10px] font-bold shrink-0 bg-gray-100 text-gray-600">
+                                #{l.id}
+                              </div>
+                              <div className="min-w-0 flex-1">
+                                <div className="flex items-center gap-2 flex-wrap">
                                   <p className="text-xs font-semibold text-gray-900 truncate">
                                     {fmtDefaultTitle(l.action)}
-                                    {l.responsable_email ? (
-                                      <span className="ml-2 text-[10px] text-gray-500 bg-gray-100 px-2 py-0.5 rounded-full">{l.responsable_email}</span>
-                                    ) : null}
                                   </p>
-                                  <p className="text-xs text-gray-500 truncate">{agent || (l.agent_id ? `Agent #${l.agent_id}` : '—')}{l.agent_telephone ? ` · ${l.agent_telephone}` : ''}</p>
-                                  {msg ? <p className="text-xs text-gray-400 mt-0.5">{msg}</p> : null}
+                                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${actionColor}`}>{l.action}</span>
+                                  {l.responsable_email ? (
+                                    <span className="text-[10px] text-gray-500 bg-gray-100 px-2 py-0.5 rounded-full">{l.responsable_email}</span>
+                                  ) : null}
                                 </div>
-                                <div className="text-right shrink-0">
-                                  <p className="text-[10px] text-gray-400">#{l.id}</p>
-                                  <p className="text-[10px] text-gray-400">{new Date(l.created_at).toLocaleString('fr-FR')}</p>
-                                </div>
+                                <p className="text-xs text-gray-500 truncate mt-0.5">{agent || (l.agent_id ? `Agent #${l.agent_id}` : '—')}{l.agent_telephone ? ` · ${l.agent_telephone}` : ''}</p>
+                                {msg ? <p className="text-xs text-gray-400 mt-0.5">{msg}</p> : null}
+                              </div>
+                              <div className="text-right shrink-0">
+                                <p className="text-[10px] text-gray-400 font-mono">{new Date(l.created_at).toLocaleString('fr-FR')}</p>
                               </div>
                             </div>
                           );

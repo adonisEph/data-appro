@@ -110,35 +110,47 @@ function SessionPanelInner({ open, onClose }: SessionPanelProps) {
 
   return (
     <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4">
-      <button className="absolute inset-0 bg-black/40" onClick={onClose} aria-label="Fermer" />
-      <div className="relative w-full max-w-3xl bg-white border border-gray-200 rounded-2xl shadow-xl overflow-hidden">
-        <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
-          <div>
-            <p className="text-sm font-semibold text-gray-800">Sessions</p>
-            <p className="text-xs text-gray-400">Utilisateurs actifs (2 minutes)</p>
+      <button className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} aria-label="Fermer" />
+      <div className="relative w-full max-w-3xl bg-white rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+        {/* Header avec gradient */}
+        <div className="bg-gradient-to-r from-brand-600 via-indigo-600 to-indigo-700 px-5 py-4 flex items-center justify-between shrink-0">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 bg-white/20 backdrop-blur-sm rounded-xl flex items-center justify-center shrink-0">
+              <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 5v2m0 0v2m0-2h2m-2 0H9m7 4h2a2 2 0 012 2v6a2 2 0 01-2 2H7a2 2 0 01-2-2v-6a2 2 0 012-2h2m4-4h.01M9 9h.01" />
+              </svg>
+            </div>
+            <div>
+              <p className="text-sm font-bold text-white">Connexions Agents</p>
+              <p className="text-xs text-white/70">Utilisateurs actifs (2 dernières minutes)</p>
+            </div>
           </div>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-700 p-1" title="Fermer">
+          <button onClick={onClose} className="w-8 h-8 rounded-lg text-white/80 hover:text-white hover:bg-white/10 flex items-center justify-center transition-colors" title="Fermer">
             <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
             </svg>
           </button>
         </div>
 
-        <div className="px-4 pt-3">
+        {/* Tabs modernes */}
+        <div className="px-5 pt-4 shrink-0">
           <div className="inline-flex rounded-xl bg-gray-100 p-1">
             <button
               onClick={() => setSessionTab('active')}
               className={clsx(
-                'px-3 py-1.5 text-xs font-semibold rounded-lg',
+                'px-4 py-2 text-xs font-semibold rounded-lg transition-all',
                 sessionTab === 'active' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-800'
               )}
             >
-              Actifs
+              <span className="flex items-center gap-1.5">
+                <span className={clsx('w-1.5 h-1.5 rounded-full', sessionTab === 'active' ? 'bg-green-500' : 'bg-gray-400')} />
+                Actifs
+              </span>
             </button>
             <button
               onClick={() => setSessionTab('history')}
               className={clsx(
-                'px-3 py-1.5 text-xs font-semibold rounded-lg',
+                'px-4 py-2 text-xs font-semibold rounded-lg transition-all',
                 sessionTab === 'history' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-800'
               )}
             >
@@ -147,127 +159,155 @@ function SessionPanelInner({ open, onClose }: SessionPanelProps) {
           </div>
         </div>
 
-        <div className="max-h-[75vh] overflow-y-auto">
+        <div className="flex-1 overflow-y-auto">
           {sessionTab === 'active' ? (
             sessions.length === 0 ? (
-              <p className="text-sm text-gray-400 p-4">Aucune session active</p>
+              <div className="flex flex-col items-center justify-center py-12 px-4">
+                <div className="w-14 h-14 bg-gray-100 rounded-full flex items-center justify-center mb-3">
+                  <svg className="w-7 h-7 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 4.354a4 4 0 110 5.292M15 8H3m12 0a4 4 0 100 5.292M15 8v8a4 4 0 01-4 4H7a4 4 0 01-4-4V8m12 0V4a4 4 0 00-4-4H7a4 4 0 00-4 4v4" />
+                  </svg>
+                </div>
+                <p className="text-sm text-gray-400">Aucune session active</p>
+              </div>
             ) : (
-              <div className="divide-y divide-gray-100">
+              <div className="px-5 py-3 space-y-2">
                 {sessions.map(s => (
-                  <div key={s.responsable_id} className="px-4 py-3">
-                    <div className="flex items-start justify-between gap-4">
-                      <div className="min-w-0">
+                  <div key={s.responsable_id} className="flex items-center gap-3 p-3 rounded-xl bg-gradient-to-r from-gray-50 to-slate-50 hover:from-gray-100 hover:to-slate-100 transition-colors">
+                    <div className={clsx('w-10 h-10 rounded-full flex items-center justify-center text-xs font-bold shrink-0', s.is_super_admin ? 'bg-amber-100 text-amber-700' : 'bg-brand-100 text-brand-700')}>
+                      {s.prenom?.[0]?.toUpperCase()}{s.nom?.[0]?.toUpperCase()}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2 flex-wrap">
                         <p className="text-sm font-semibold text-gray-900 truncate">
                           {(s.prenom || s.nom) ? `${s.prenom ?? ''} ${s.nom ?? ''}`.trim() : s.email}
-                          {s.is_super_admin ? <span className="ml-1 text-amber-500">★</span> : null}
-                          {s.is_viewer ? <span className="ml-2 text-[10px] text-gray-500 bg-gray-100 px-2 py-0.5 rounded-full">Viewer</span> : null}
                         </p>
-                        <p className="text-xs text-gray-500 truncate">{s.email}{s.telephone ? ` · ${s.telephone}` : ''}</p>
-                        <p className="text-xs text-gray-400 truncate">{s.path ?? '-'}{s.page_title ? ` · ${s.page_title}` : ''}</p>
+                        {s.is_super_admin ? <span className="text-[10px] font-bold text-amber-700 bg-amber-100 px-2 py-0.5 rounded-full">★ Admin</span> : null}
+                        {s.is_viewer ? <span className="text-[10px] font-bold text-gray-600 bg-gray-100 px-2 py-0.5 rounded-full">Viewer</span> : null}
                       </div>
-                      <div className="text-right shrink-0">
-                        <p className="text-[10px] text-gray-400">{new Date(s.last_seen_at).toLocaleTimeString('fr-FR')}</p>
-                      </div>
+                      <p className="text-xs text-gray-500 truncate mt-0.5">{s.email}{s.telephone ? ` · ${s.telephone}` : ''}</p>
+                      <p className="text-xs text-gray-400 truncate mt-0.5">{s.path ?? '-'}{s.page_title ? ` · ${s.page_title}` : ''}</p>
+                    </div>
+                    <div className="text-right shrink-0 flex flex-col items-end gap-1">
+                      <span className="inline-flex items-center gap-1 text-[10px] text-green-600 font-medium">
+                        <span className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse" />
+                        En ligne
+                      </span>
+                      <p className="text-[10px] text-gray-400">{new Date(s.last_seen_at).toLocaleTimeString('fr-FR')}</p>
                     </div>
                   </div>
                 ))}
               </div>
             )
           ) : (
-            <div className="px-4 pb-4">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-3">
+            <div className="px-5 pb-5">
+              {/* Filtres modernes */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-3">
                 <div>
-                  <label className="block text-[10px] font-semibold text-gray-500 mb-1">Du</label>
+                  <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-wide mb-1.5">Du</label>
                   <input
                     type="datetime-local"
                     value={historyFilters.from ?? ''}
                     onChange={e => setHistoryFilters(f => ({ ...f, from: e.target.value }))}
-                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-xs"
+                    className="w-full border border-gray-200 rounded-xl px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent"
                   />
                 </div>
                 <div>
-                  <label className="block text-[10px] font-semibold text-gray-500 mb-1">Au</label>
+                  <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-wide mb-1.5">Au</label>
                   <input
                     type="datetime-local"
                     value={historyFilters.to ?? ''}
                     onChange={e => setHistoryFilters(f => ({ ...f, to: e.target.value }))}
-                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-xs"
+                    className="w-full border border-gray-200 rounded-xl px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent"
                   />
                 </div>
                 <div>
-                  <label className="block text-[10px] font-semibold text-gray-500 mb-1">Email</label>
+                  <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-wide mb-1.5">Email</label>
                   <input
                     value={historyFilters.email ?? ''}
                     onChange={e => setHistoryFilters(f => ({ ...f, email: e.target.value }))}
-                    placeholder="ex: user@domaine.com"
-                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-xs"
+                    placeholder="user@domaine.com"
+                    className="w-full border border-gray-200 rounded-xl px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent"
                   />
                 </div>
                 <div>
-                  <label className="block text-[10px] font-semibold text-gray-500 mb-1">Activité</label>
+                  <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-wide mb-1.5">Activité</label>
                   <input
                     value={historyFilters.activity ?? ''}
                     onChange={e => setHistoryFilters(f => ({ ...f, activity: e.target.value }))}
-                    placeholder="path, page, login, navigate…"
-                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-xs"
+                    placeholder="login, navigate…"
+                    className="w-full border border-gray-200 rounded-xl px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent"
                   />
                 </div>
                 <div>
-                  <label className="block text-[10px] font-semibold text-gray-500 mb-1">Limite</label>
+                  <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-wide mb-1.5">Limite</label>
                   <input
                     type="number"
                     min={1}
                     max={500}
                     value={historyFilters.limit ?? 200}
                     onChange={e => setHistoryFilters(f => ({ ...f, limit: Number(e.target.value) || 200 }))}
-                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-xs"
+                    className="w-full border border-gray-200 rounded-xl px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent"
                   />
                 </div>
               </div>
 
-              <div className="flex items-center justify-between gap-2 pt-3">
+              {/* Actions bar */}
+              <div className="flex items-center justify-between gap-2 pt-4">
                 <div className="flex items-center gap-2">
                   <button
                     onClick={runHistorySearch}
                     disabled={historyLoading}
-                    className="px-3 py-2 text-xs font-semibold rounded-lg bg-brand-600 text-white hover:bg-brand-700 disabled:opacity-60"
+                    className="px-4 py-2 text-xs font-semibold rounded-xl bg-brand-600 text-white hover:bg-brand-700 disabled:opacity-60 transition-colors flex items-center gap-1.5"
                   >
-                    {historyLoading ? 'Chargement…' : 'Rechercher'}
+                    {historyLoading ? (
+                      <><span className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin" /> Chargement…</>
+                    ) : (
+                      <><svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg> Rechercher</>
+                    )}
                   </button>
                   <button
                     onClick={exportHistoryXlsx}
                     disabled={historyLoading}
-                    className="px-3 py-2 text-xs font-semibold rounded-lg bg-gray-900 text-white hover:bg-black disabled:opacity-60"
+                    className="px-4 py-2 text-xs font-semibold rounded-xl bg-gray-900 text-white hover:bg-black disabled:opacity-60 transition-colors flex items-center gap-1.5"
                   >
+                    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
                     Export Excel
                   </button>
                 </div>
-                <p className="text-[10px] text-gray-400">{historyEvents.length} résultat(s)</p>
+                <span className="text-xs text-gray-400 font-medium bg-gray-100 px-3 py-1 rounded-full">{historyEvents.length} résultat{historyEvents.length > 1 ? 's' : ''}</span>
               </div>
 
-              <div className="mt-3 border border-gray-100 rounded-xl overflow-hidden">
+              {/* Résultats */}
+              <div className="mt-4 space-y-2">
                 {historyEvents.length === 0 ? (
-                  <p className="text-sm text-gray-400 p-4">Aucun événement</p>
-                ) : (
-                  <div className="divide-y divide-gray-100">
-                    {historyEvents.map(e => (
-                      <div key={e.id} className="px-4 py-3">
-                        <div className="flex items-start justify-between gap-4">
-                          <div className="min-w-0">
-                            <p className="text-xs font-semibold text-gray-900 truncate">
-                              {(e.prenom || e.nom) ? `${e.prenom ?? ''} ${e.nom ?? ''}`.trim() : e.email}
-                              <span className="ml-2 text-[10px] text-gray-500 bg-gray-100 px-2 py-0.5 rounded-full">{e.event_type}</span>
-                            </p>
-                            <p className="text-xs text-gray-500 truncate">{e.email}{e.telephone ? ` · ${e.telephone}` : ''}{e.ip_address ? ` · ${e.ip_address}` : ''}</p>
-                            <p className="text-xs text-gray-400 truncate">{e.path ?? '-'}{e.page_title ? ` · ${e.page_title}` : ''}</p>
-                          </div>
-                          <div className="text-right shrink-0">
-                            <p className="text-[10px] text-gray-400">{new Date(e.created_at).toLocaleString('fr-FR')}</p>
-                          </div>
-                        </div>
-                      </div>
-                    ))}
+                  <div className="flex flex-col items-center justify-center py-10">
+                    <div className="w-12 h-12 bg-gray-100 rounded-full flex items-center justify-center mb-2">
+                      <svg className="w-6 h-6 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" /></svg>
+                    </div>
+                    <p className="text-sm text-gray-400">Aucun événement</p>
                   </div>
+                ) : (
+                  historyEvents.map(e => (
+                    <div key={e.id} className="flex items-start gap-3 p-3 rounded-xl border border-gray-100 hover:border-gray-200 hover:bg-gray-50/50 transition-colors">
+                      <div className="w-8 h-8 rounded-lg flex items-center justify-center text-[10px] font-bold shrink-0 bg-indigo-100 text-indigo-700">
+                        {e.prenom?.[0]?.toUpperCase()}{e.nom?.[0]?.toUpperCase()}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <p className="text-xs font-semibold text-gray-900 truncate">
+                            {(e.prenom || e.nom) ? `${e.prenom ?? ''} ${e.nom ?? ''}`.trim() : e.email}
+                          </p>
+                          <span className="text-[10px] font-bold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded-full">{e.event_type}</span>
+                        </div>
+                        <p className="text-xs text-gray-500 truncate mt-0.5">{e.email}{e.telephone ? ` · ${e.telephone}` : ''}{e.ip_address ? ` · ${e.ip_address}` : ''}</p>
+                        <p className="text-xs text-gray-400 truncate mt-0.5">{e.path ?? '-'}{e.page_title ? ` · ${e.page_title}` : ''}</p>
+                      </div>
+                      <div className="text-right shrink-0">
+                        <p className="text-[10px] text-gray-400 font-mono">{new Date(e.created_at).toLocaleString('fr-FR')}</p>
+                      </div>
+                    </div>
+                  ))
                 )}
               </div>
             </div>

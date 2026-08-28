@@ -575,7 +575,7 @@ export default function AgentsPage() {
             </Card>
           </button>
           );
-        })})
+        })}
       </div>
 
       {/* Filtres */}
