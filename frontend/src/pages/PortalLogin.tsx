@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { portalApi } from '../lib/api';
 import { usePWA } from '../hooks/usePWA';
+import { APP_VERSION } from '../config/version';
 
 export default function PortalLogin() {
   const navigate = useNavigate();
@@ -88,6 +89,7 @@ export default function PortalLogin() {
             )}
           </div>
         </div>
+        <p className="text-[10px] text-indigo-300 text-center mt-3 font-mono">v{APP_VERSION}</p>
       </div>
     </div>
   );

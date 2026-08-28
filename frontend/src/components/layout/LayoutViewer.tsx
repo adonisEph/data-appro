@@ -6,6 +6,7 @@ import { usePWA } from '../../hooks/usePWA';
 import { agentsApi, auditLogsApi, eventsApi, sessionsApi } from '../../lib/api';
 import { useToast } from '../ui/Toast';
 import * as XLSX from 'xlsx';
+import { APP_VERSION } from '../../config/version';
 
 function safeJsonParse<T>(value: unknown): T | null {
   if (typeof value !== 'string') return null;
@@ -721,6 +722,7 @@ export function LayoutViewer() {
                 {user?.prenom?.[0]?.toUpperCase()}{user?.nom?.[0]?.toUpperCase()}
               </div>
               <span className="hidden sm:block text-xs text-gray-600 truncate max-w-[180px]">{user?.prenom} {user?.nom}</span>
+              <span className="hidden sm:block text-[10px] text-gray-300 font-mono">v{APP_VERSION}</span>
               <button onClick={() => { logout(); navigate('/login'); }}
                 className="text-gray-400 hover:text-red-500 transition-colors p-1" title="Déconnexion">
                 <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">

@@ -4,6 +4,7 @@ import { useAuth } from '../hooks/useAuth';
 import { Button } from '../components/ui';
 import { usePWA } from '../hooks/usePWA';
 import { SAVED_EMAIL_KEY, AUTO_LOGOUT_KEY } from '../hooks/useInactivityLogout';
+import { APP_VERSION } from '../config/version';
 
 export default function LoginPage() {
   const { login } = useAuth();
@@ -99,6 +100,7 @@ export default function LoginPage() {
             <Button type="submit" loading={loading} className="w-full" size="lg">Se connecter</Button>
           </form>
           <p className="text-xs text-gray-400 text-center mt-6">Accès réservé aux responsables Data Approvisionnement</p>
+          <p className="text-[10px] text-gray-300 text-center mt-2 font-mono">v{APP_VERSION}</p>
         </div>
 
         {/* Bouton installer PWA */}

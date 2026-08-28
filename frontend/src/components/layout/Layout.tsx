@@ -9,6 +9,7 @@ import { useToast } from '../ui/Toast';
 import type { Agent } from '../../types';
 import * as XLSX from 'xlsx';
 import { SessionPanel } from './SessionPanel';
+import { APP_VERSION, APP_VERSION_DATE } from '../../config/version';
 
 function safeJsonParse<T>(value: unknown): T | null {
   if (typeof value !== 'string') return null;
@@ -638,7 +639,8 @@ export function Layout() {
             </div>
           </div>
 
-          <div className="flex items-center justify-end gap-2 pt-2">
+          <div className="flex items-center justify-between pt-2">
+            <span className="text-[10px] text-gray-300 font-mono">v{APP_VERSION} · {APP_VERSION_DATE}</span>
             <div className="relative" ref={notifPanelRef}>
               <button
                 onClick={() => {

@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { portalApi } from '../lib/api';
 import { usePWA } from '../hooks/usePWA';
+import { APP_VERSION } from '../config/version';
 
 interface PortalStatus {
   agent: { id: number; nom: string; prenom: string; telephone: string; quota_gb: number; role_label: string | null; client: string | null; zone: string | null };
@@ -419,6 +420,8 @@ export default function PortalStatus() {
           </div>
         </div>
       )}
+
+      <p className="text-center text-[10px] text-gray-400 font-mono pb-4">v{APP_VERSION}</p>
     </div>
   );
 }
