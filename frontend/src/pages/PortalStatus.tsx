@@ -265,6 +265,8 @@ export default function PortalStatus() {
                 <div className={`rounded-2xl p-5 border-2 ${
                   derniere_campagne.statut === 'en_cours'
                     ? 'bg-gradient-to-br from-amber-50 to-orange-50 border-amber-300'
+                    : derniere_campagne.statut === 'brouillon'
+                    ? 'bg-gradient-to-br from-blue-50 to-indigo-50 border-blue-300'
                     : 'bg-gray-50 border-dashed border-gray-200'
                 }`}>
                   {derniere_campagne.statut === 'en_cours' ? (
@@ -275,6 +277,18 @@ export default function PortalStatus() {
                       <div className="flex-1 min-w-0">
                         <p className="text-xl font-black text-amber-700">En attente</p>
                         <p className="text-sm text-gray-600 mt-0.5">Votre approvisionnement est en cours de traitement. Veuillez patienter.</p>
+                      </div>
+                    </div>
+                  ) : derniere_campagne.statut === 'brouillon' ? (
+                    <div className="flex items-center gap-4">
+                      <div className="w-14 h-14 rounded-2xl flex items-center justify-center shrink-0 shadow-lg bg-blue-500 shadow-blue-500/30">
+                        <svg className="w-7 h-7 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xl font-black text-blue-700">Pas encore lancée</p>
+                        <p className="text-sm text-gray-600 mt-0.5">La campagne de ce mois n'a pas encore été lancée. Revenez plus tard pour vérifier votre statut.</p>
                       </div>
                     </div>
                   ) : (
