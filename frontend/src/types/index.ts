@@ -38,6 +38,8 @@ export interface Agent {
   forfait_label: string | null;
   prix_cfa: number;
   actif: number;
+  client: string | null;
+  zone: string | null;
   created_at: string;
   updated_at: string;
 }

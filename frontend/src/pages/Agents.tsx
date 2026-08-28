@@ -50,6 +50,10 @@ export default function AgentsPage() {
   const [filterRole, setFilterRole]       = useState('');
   const [filterQuotaGb, setFilterQuotaGb] = useState<number | null>(null);
   const [showAllQuotas, setShowAllQuotas] = useState(false);
+  const [bulkAssignOpen, setBulkAssignOpen] = useState(false);
+  const [bulkSelected, setBulkSelected]   = useState<Set<number>>(new Set());
+  const [bulkClient, setBulkClient]       = useState('');
+  const [bulkZone, setBulkZone]           = useState('');
 
   // Agents avec refetch auto
   const { data, isLoading, dataUpdatedAt } = useQuery({
@@ -188,8 +192,38 @@ export default function AgentsPage() {
       quota_gb: ROLE_QUOTAS['technicien'],
       prix_cfa: 0,
       forfait_label: '',
+      client: '',
+      zone: '',
     });
     setCreateAgent(true);
+  };
+
+  const bulkAssignMut = useMutation({
+    mutationFn: (data: { agent_ids: number[]; client?: string | null; zone?: string | null }) => agentsApi.bulkAssign(data),
+    onSuccess: (res) => {
+      qc.invalidateQueries({ queryKey: ['agents'] });
+      toast.success('Assignation réussie', `${res.updated} agent(s) mis à jour.`);
+      setBulkAssignOpen(false);
+      setBulkSelected(new Set());
+      setBulkClient('');
+      setBulkZone('');
+    },
+    onError: (err: Error) => toast.error('Erreur', err.message),
+  });
+
+  const toggleBulk = (id: number) => {
+    setBulkSelected(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+  const toggleBulkAll = () => {
+    if (bulkSelected.size === displayed.length) {
+      setBulkSelected(new Set());
+    } else {
+      setBulkSelected(new Set(displayed.map(a => a.id)));
+    }
   };
 
   const normalizeTel = (v: string) => {
@@ -246,6 +280,8 @@ export default function AgentsPage() {
       Prenom: a.prenom,
       Nom: a.nom,
       Telephone: a.telephone,
+      Client: a.client ?? '',
+      Zone: a.zone ?? '',
       Quota_GB: a.quota_gb,
       Prix_CFA: a.prix_cfa,
       Forfait: a.forfait_label ?? '',
@@ -277,6 +313,8 @@ export default function AgentsPage() {
       <tr>
         <td class="num">${i + 1}</td>
         <td class="name">${a.prenom} ${a.nom}</td>
+        <td class="center">${a.client ?? '—'}</td>
+        <td class="center">${a.zone ?? '—'}</td>
         <td class="center">${a.quota_gb} GB</td>
         <td class="right">${a.prix_cfa > 0 ? a.prix_cfa.toLocaleString('fr-FR') + ' F' : '—'}</td>
         <td class="tel">${cleanTel(a.telephone)}</td>
@@ -362,6 +400,8 @@ export default function AgentsPage() {
       <tr>
         <th class="center">N°</th>
         <th>Nom(s) et Prénom(s)</th>
+        <th class="center">Client</th>
+        <th class="center">Zone</th>
         <th class="center">Quota</th>
         <th class="right">Prix</th>
         <th>Téléphone</th>
@@ -495,6 +535,20 @@ export default function AgentsPage() {
               Ajouter
             </Button>
           )}
+          {isSuperAdmin && (
+            <Button
+              size="sm"
+              variant="secondary"
+              onClick={() => { setBulkSelected(new Set()); setBulkAssignOpen(true); }}
+              className="w-full sm:w-auto"
+            >
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+              </svg>
+              <span className="hidden sm:inline">Assigner Client/Zone</span>
+              <span className="sm:hidden">Client/Zone</span>
+            </Button>
+          )}
         </div>
       </div>
 
@@ -618,11 +672,13 @@ export default function AgentsPage() {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-gray-100">
-                    <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Agent</th>
-                    <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Téléphone</th>
-                    <th className="text-right px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Quota data</th>
-                    <th className="text-right px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Prix CFA</th>
-                    <th className="text-right px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Actions</th>
+                    <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase whitespace-nowrap">Agent</th>
+                    <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase whitespace-nowrap">Téléphone</th>
+                    <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase whitespace-nowrap">Client</th>
+                    <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase whitespace-nowrap">Zone</th>
+                    <th className="text-right px-4 py-3 text-xs font-semibold text-gray-500 uppercase whitespace-nowrap">Quota data</th>
+                    <th className="text-right px-4 py-3 text-xs font-semibold text-gray-500 uppercase whitespace-nowrap">Prix CFA</th>
+                    <th className="text-right px-4 py-3 text-xs font-semibold text-gray-500 uppercase whitespace-nowrap">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-50">
@@ -641,8 +697,10 @@ export default function AgentsPage() {
                           </div>
                         </div>
                       </td>
-                      <td className="px-4 py-3 font-mono text-xs text-gray-600">{fmtTelephone(agent.telephone)}</td>
-                      <td className="px-4 py-3 text-right font-bold text-indigo-700">{agent.quota_gb} GB</td>
+                      <td className="px-4 py-3 font-mono text-xs text-gray-600 whitespace-nowrap">{fmtTelephone(agent.telephone)}</td>
+                      <td className="px-4 py-3 text-sm text-gray-700 whitespace-nowrap">{agent.client ?? '—'}</td>
+                      <td className="px-4 py-3 text-sm text-gray-700 whitespace-nowrap">{agent.zone ?? '—'}</td>
+                      <td className="px-4 py-3 text-right font-bold text-indigo-700 whitespace-nowrap">{agent.quota_gb} GB</td>
                       <td className="px-4 py-3 text-right text-gray-700">
                         {agent.prix_cfa > 0 ? agent.prix_cfa.toLocaleString('fr-FR') + ' F' : '—'}
                       </td>
@@ -698,6 +756,12 @@ export default function AgentsPage() {
                     </div>
                   </div>
                 </div>
+                {(agent.client || agent.zone) && (
+                  <div className="flex gap-2 text-xs text-gray-500 mt-2">
+                    {agent.client && <span className="bg-gray-100 px-2 py-0.5 rounded-full">{agent.client}</span>}
+                    {agent.zone && <span className="bg-gray-100 px-2 py-0.5 rounded-full">{agent.zone}</span>}
+                  </div>
+                )}
                 <div className="flex items-center justify-between pt-2 border-t border-gray-100">
                   <div className="flex gap-3 text-xs">
                     <span className="font-bold text-indigo-700">{agent.quota_gb} GB</span>
@@ -786,6 +850,23 @@ export default function AgentsPage() {
                 placeholder="Ex: Ingénieur Réseau, Comptable…"
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"/>
             )}
+          </div>
+
+          <hr className="border-gray-100"/>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">Client</label>
+              <input type="text" value={form.client ?? ''} onChange={e => setForm(f => ({ ...f, client: e.target.value }))}
+                placeholder="ex: Divers client STHIC"
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"/>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">Zone</label>
+              <input type="text" value={form.zone ?? ''} onChange={e => setForm(f => ({ ...f, zone: e.target.value }))}
+                placeholder="ex: Brazzaville, Pointe-Noire…"
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"/>
+            </div>
           </div>
 
           <hr className="border-gray-100"/>
@@ -946,6 +1027,23 @@ export default function AgentsPage() {
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"/>
               )}
             </div>
+
+          <hr className="border-gray-100"/>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">Client</label>
+              <input type="text" value={form.client ?? ''} onChange={e => setForm(f => ({ ...f, client: e.target.value }))}
+                placeholder="ex: Divers client STHIC"
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"/>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">Zone</label>
+              <input type="text" value={form.zone ?? ''} onChange={e => setForm(f => ({ ...f, zone: e.target.value }))}
+                placeholder="ex: Brazzaville, Pointe-Noire…"
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"/>
+            </div>
+          </div>
 
             <hr className="border-gray-100"/>
 
@@ -1163,6 +1261,101 @@ export default function AgentsPage() {
             </div>
           </div>
         )}
+      </Modal>
+
+      {/* Modal Assignation en masse Client/Zone */}
+      <Modal open={bulkAssignOpen} onClose={() => setBulkAssignOpen(false)} title="Assigner Client / Zone en masse">
+        <div className="space-y-4">
+          <p className="text-xs text-gray-500">
+            Cochez les agents à assigner, puis renseignez le client et/ou la zone. Seuls les champs remplis seront mis à jour.
+          </p>
+
+          {/* Sélection */}
+          <div className="border border-gray-200 rounded-xl overflow-hidden">
+            <div className="flex items-center justify-between px-3 py-2 bg-gray-50 border-b border-gray-100">
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={bulkSelected.size === displayed.length && displayed.length > 0}
+                  onChange={toggleBulkAll}
+                  className="w-4 h-4 rounded border-gray-300 text-brand-600 focus:ring-brand-500"
+                />
+                <span className="text-xs font-semibold text-gray-700">Tout sélectionner</span>
+              </label>
+              <span className="text-xs font-bold text-brand-600">{bulkSelected.size} sélectionné{bulkSelected.size > 1 ? 's' : ''}</span>
+            </div>
+            <div className="max-h-64 overflow-y-auto divide-y divide-gray-50">
+              {displayed.map(agent => (
+                <label
+                  key={agent.id}
+                  className="flex items-center gap-3 px-3 py-2 hover:bg-gray-50 cursor-pointer"
+                >
+                  <input
+                    type="checkbox"
+                    checked={bulkSelected.has(agent.id)}
+                    onChange={() => toggleBulk(agent.id)}
+                    className="w-4 h-4 rounded border-gray-300 text-brand-600 focus:ring-brand-500"
+                  />
+                  <div className="flex items-center gap-2 min-w-0 flex-1">
+                    <div className="w-6 h-6 bg-brand-100 rounded-full flex items-center justify-center text-brand-700 text-[10px] font-semibold shrink-0">
+                      {agent.prenom?.[0]?.toUpperCase()}{agent.nom?.[0]?.toUpperCase()}
+                    </div>
+                    <span className="text-sm text-gray-900 truncate">{agent.prenom} {agent.nom}</span>
+                    <span className="text-xs text-gray-400 font-mono shrink-0">{fmtTelephone(agent.telephone)}</span>
+                  </div>
+                  <div className="flex gap-1 shrink-0">
+                    {agent.client && <span className="text-[10px] bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded">{agent.client}</span>}
+                    {agent.zone && <span className="text-[10px] bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded">{agent.zone}</span>}
+                  </div>
+                </label>
+              ))}
+            </div>
+          </div>
+
+          {/* Champs Client / Zone */}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">Client</label>
+              <input
+                type="text"
+                value={bulkClient}
+                onChange={e => setBulkClient(e.target.value)}
+                placeholder="ex: Divers client STHIC"
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
+              />
+              <p className="text-[10px] text-gray-400 mt-1">Laisser vide pour ne pas modifier</p>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">Zone</label>
+              <input
+                type="text"
+                value={bulkZone}
+                onChange={e => setBulkZone(e.target.value)}
+                placeholder="ex: Brazzaville, Pointe-Noire…"
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
+              />
+              <p className="text-[10px] text-gray-400 mt-1">Laisser vide pour ne pas modifier</p>
+            </div>
+          </div>
+
+          <div className="flex justify-end gap-3 pt-2">
+            <Button variant="secondary" onClick={() => setBulkAssignOpen(false)}>Annuler</Button>
+            <Button
+              loading={bulkAssignMut.isPending}
+              disabled={bulkSelected.size === 0 || (!bulkClient.trim() && !bulkZone.trim())}
+              onClick={() => {
+                const payload: { agent_ids: number[]; client?: string | null; zone?: string | null } = {
+                  agent_ids: Array.from(bulkSelected),
+                };
+                if (bulkClient.trim()) payload.client = bulkClient.trim();
+                if (bulkZone.trim()) payload.zone = bulkZone.trim();
+                bulkAssignMut.mutate(payload);
+              }}
+            >
+              Assigner à {bulkSelected.size} agent{bulkSelected.size > 1 ? 's' : ''}
+            </Button>
+          </div>
+        </div>
       </Modal>
     </div>
   );

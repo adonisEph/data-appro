@@ -459,6 +459,8 @@ agentsRouter.post('/', noViewerMiddleware, requireCanImportAgents, async c => {
     role?: Role; role_label?: string | null;
     quota_gb?: number; prix_cfa?: number;
     forfait_label?: string | null;
+    client?: string | null;
+    zone?: string | null;
   }>();
 
   const nom = (body.nom ?? '').trim();
@@ -477,8 +479,8 @@ agentsRouter.post('/', noViewerMiddleware, requireCanImportAgents, async c => {
 
   try {
     const inserted = await c.env.DB.prepare(
-      `INSERT INTO agents (nom, prenom, telephone, role, role_label, quota_gb, prix_cfa, forfait_label)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`
+      `INSERT INTO agents (nom, prenom, telephone, role, role_label, quota_gb, prix_cfa, forfait_label, client, zone)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`
     ).bind(
       nom,
       prenom,
@@ -488,6 +490,8 @@ agentsRouter.post('/', noViewerMiddleware, requireCanImportAgents, async c => {
       quota,
       prix,
       body.forfait_label ?? null,
+      body.client ?? null,
+      body.zone ?? null,
     ).first<{ id: number }>();
 
     if (!inserted) return c.json({ error: 'Erreur création agent' }, 500);
@@ -559,6 +563,7 @@ agentsRouter.put('/:id', noViewerMiddleware, async c => {
     nom?: string; prenom?: string; telephone?: string;
     role?: Role; role_label?: string; quota_gb?: number;
     prix_cfa?: number; forfait_label?: string; actif?: number;
+    client?: string | null; zone?: string | null;
   }>();
 
   const before = await c.env.DB.prepare(`SELECT nom, prenom, telephone, quota_gb FROM agents WHERE id = ?`).bind(id).first<{ nom: string; prenom: string; telephone: string; quota_gb: number }>();
@@ -573,6 +578,8 @@ agentsRouter.put('/:id', noViewerMiddleware, async c => {
   if (body.forfait_label !== undefined) { updates.push('forfait_label = ?');  values.push(body.forfait_label); }
   if (body.actif         !== undefined) { updates.push('actif = ?');          values.push(body.actif); }
   if (body.role          !== undefined) { updates.push('role = ?');           values.push(body.role); }
+  if (body.client        !== undefined) { updates.push('client = ?');         values.push(body.client); }
+  if (body.zone          !== undefined) { updates.push('zone = ?');           values.push(body.zone); }
   if (!updates.length) return c.json({ error: 'Rien à modifier' }, 400);
   updates.push("updated_at = datetime('now')");
   values.push(id);
@@ -707,6 +714,47 @@ agentsRouter.delete('/:id', superAdminMiddleware, async c => {
   await c.env.DB.prepare(`INSERT INTO audit_logs (agent_id, responsable_id, action, details) VALUES (?, ?, ?, ?)`)
     .bind(id, Number((c.get('user') as JWTPayload).sub), 'AGENT_DELETED', JSON.stringify({ agent })).run();
   return c.json({ ok: true });
+});
+
+// Bulk assign client/zone to multiple agents
+agentsRouter.put('/bulk-assign', superAdminMiddleware, async c => {
+  const { agent_ids, client, zone } = await c.req.json<{
+    agent_ids: number[];
+    client?: string | null;
+    zone?: string | null;
+  }>();
+
+  if (!Array.isArray(agent_ids) || agent_ids.length === 0) {
+    return c.json({ error: 'Aucun agent sélectionné' }, 400);
+  }
+  if (client === undefined && zone === undefined) {
+    return c.json({ error: 'Rien à assigner' }, 400);
+  }
+
+  const updates: string[] = [];
+  if (client !== undefined) updates.push('client = ?');
+  if (zone !== undefined) updates.push('zone = ?');
+  updates.push("updated_at = datetime('now')");
+
+  const placeholders = agent_ids.map(() => '?').join(', ');
+  const bindValues: unknown[] = [];
+  if (client !== undefined) bindValues.push(client);
+  if (zone !== undefined) bindValues.push(zone);
+  bindValues.push(...agent_ids);
+
+  await c.env.DB.prepare(
+    `UPDATE agents SET ${updates.join(', ')} WHERE id IN (${placeholders})`
+  ).bind(...bindValues).run();
+
+  await c.env.DB.prepare(
+    `INSERT INTO audit_logs (responsable_id, action, details) VALUES (?, ?, ?)`
+  ).bind(
+    Number((c.get('user') as JWTPayload).sub),
+    'AGENT_BULK_ASSIGN',
+    JSON.stringify({ agent_ids, client, zone })
+  ).run();
+
+  return c.json({ ok: true, updated: agent_ids.length });
 });
 
 api.route('/agents', agentsRouter);

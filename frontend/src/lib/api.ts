@@ -47,6 +47,8 @@ export const agentsApi = {
     request<{ ok: boolean; agent: Agent }>(`/agents/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   delete: (id: number) =>
     request<{ ok: boolean }>(`/agents/${id}`, { method: 'DELETE' }),
+  bulkAssign: (data: { agent_ids: number[]; client?: string | null; zone?: string | null }) =>
+    request<{ ok: boolean; updated: number }>('/agents/bulk-assign', { method: 'PUT', body: JSON.stringify(data) }),
 };
 
 // Utilisateurs
