@@ -1343,10 +1343,17 @@ campagnesRouter.get('/:id/eligible-agents', async c => {
   ).bind(cutoff, cutoff).first<{ s: number }>();
 
   const { results } = await c.env.DB.prepare(
-    `SELECT * FROM agents
-     WHERE actif = 1 AND datetime(created_at) <= datetime(?)
-     ORDER BY nom, prenom`
-  ).bind(cutoff).all();
+    `SELECT a.*,
+            (SELECT MAX(COALESCE(t.confirme_le, t.tente_le))
+             FROM transactions t
+             WHERE t.agent_id = a.id
+               AND t.campagne_id != ?
+               AND t.statut = 'confirme'
+            ) AS derniere_activation_le
+     FROM agents a
+     WHERE a.actif = 1 AND datetime(a.created_at) <= datetime(?)
+     ORDER BY a.nom, a.prenom`
+  ).bind(id, cutoff).all();
 
   const agentsAll = results ?? [];
 

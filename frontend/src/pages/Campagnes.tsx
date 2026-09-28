@@ -11,7 +11,7 @@ import {
   Card, Button, CampagneBadge, TxBadge, RoleBadge,
   ProgressBar, Spinner, EmptyState, Modal,
 } from '../components/ui';
-import { fmtFCFA, fmtMois, fmtTelephone, fmtPct, cleanTel } from '../lib/utils';
+import { fmtFCFA, fmtMois, fmtTelephone, fmtPct, fmtDate, cleanTel } from '../lib/utils';
 import * as XLSX from 'xlsx';
 import { ROLE_QUOTAS } from '../types';
 
@@ -208,8 +208,8 @@ export function CampagneDetailPage() {
   const [smsSelectedId, setSmsSelectedId] = useState<number | null>(null);
   const [todoOnly, setTodoOnly] = useState(true);
   const [manualSearch, setManualSearch] = useState('');
-  const [manualSort, setManualSort] = useState<'quota' | 'montant'>('montant');
-  const [manualSortDir, setManualSortDir] = useState<'asc' | 'desc'>('desc');
+  const [manualSort, setManualSort] = useState<'quota' | 'montant' | 'activation'>('activation');
+  const [manualSortDir, setManualSortDir] = useState<'asc' | 'desc'>('asc');
   const [manualFilterZone, setManualFilterZone] = useState('');
   const [manualFilterClient, setManualFilterClient] = useState('');
   const [manualModal, setManualModal] = useState<null | {
@@ -425,11 +425,15 @@ export function CampagneDetailPage() {
       const rawStatut = tx?.statut ?? 'en_attente';
       const statut = rawStatut === 'envoye' ? 'en_attente' : rawStatut;
       const montant = a.prix_cfa > 0 ? a.prix_cfa : 0;
-      return { a, tx, statut, montant };
+      // Dernière activation : confirmation de cette campagne, sinon dernière campagne passée
+      const derniereAct = tx?.confirme_le ?? a.derniere_activation_le ?? null;
+      const parsedMs = derniereAct ? new Date(derniereAct.replace(' ', 'T')).getTime() : NaN;
+      const actMs = Number.isFinite(parsedMs) ? parsedMs : 0;
+      return { a, tx, statut, montant, derniereAct, actMs };
     })
     .sort((r1, r2) => {
-      const k1 = manualSort === 'quota' ? r1.a.quota_gb : r1.montant;
-      const k2 = manualSort === 'quota' ? r2.a.quota_gb : r2.montant;
+      const k1 = manualSort === 'quota' ? r1.a.quota_gb : manualSort === 'activation' ? r1.actMs : r1.montant;
+      const k2 = manualSort === 'quota' ? r2.a.quota_gb : manualSort === 'activation' ? r2.actMs : r2.montant;
       const d = k1 - k2;
       return manualSortDir === 'asc' ? d : -d;
     });
@@ -675,9 +679,10 @@ export function CampagneDetailPage() {
               <span className="text-xs text-gray-500">Tri</span>
               <select
                 value={manualSort}
-                onChange={e => setManualSort(e.target.value as 'quota' | 'montant')}
+                onChange={e => setManualSort(e.target.value as 'quota' | 'montant' | 'activation')}
                 className="px-2 py-1 border border-gray-300 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-brand-500"
               >
+                <option value="activation">Dernière activation</option>
                 <option value="montant">Montant</option>
                 <option value="quota">Quota</option>
               </select>
@@ -725,6 +730,7 @@ export function CampagneDetailPage() {
                   <th className="text-left px-3 py-2 text-xs font-semibold text-gray-500 uppercase">Téléphone</th>
                   <th className="text-left px-3 py-2 text-xs font-semibold text-gray-500 uppercase">Client</th>
                   <th className="text-left px-3 py-2 text-xs font-semibold text-gray-500 uppercase">Zone</th>
+                  <th className="text-left px-3 py-2 text-xs font-semibold text-gray-500 uppercase">Dernière act.</th>
                   <th className="text-right px-3 py-2 text-xs font-semibold text-gray-500 uppercase">Quota</th>
                   <th className="text-right px-3 py-2 text-xs font-semibold text-gray-500 uppercase">Montant</th>
                   <th className="text-left px-3 py-2 text-xs font-semibold text-gray-500 uppercase">Statut</th>
@@ -768,6 +774,25 @@ export function CampagneDetailPage() {
                       </td>
                       <td className="px-3 py-2 text-xs text-gray-600 whitespace-nowrap">{a.client ?? '—'}</td>
                       <td className="px-3 py-2 text-xs text-gray-600 whitespace-nowrap">{a.zone ?? '—'}</td>
+                      <td className="px-3 py-2 whitespace-nowrap">
+                        {row.derniereAct ? (
+                          <div>
+                            <p className="text-xs font-medium text-gray-700">{fmtDate(row.derniereAct)}</p>
+                            {(() => {
+                              const echeanceMs = row.actMs + 30 * 86400_000;
+                              const overdue = echeanceMs <= Date.now();
+                              const soon = !overdue && echeanceMs <= Date.now() + 3 * 86400_000;
+                              return (
+                                <p className={`text-[10px] ${overdue ? 'text-red-600 font-semibold' : soon ? 'text-amber-600 font-medium' : 'text-gray-400'}`}>
+                                  → {fmtDate(new Date(echeanceMs).toISOString())}
+                                </p>
+                              );
+                            })()}
+                          </div>
+                        ) : (
+                          <span className="text-xs text-amber-600">Jamais</span>
+                        )}
+                      </td>
                       <td className="px-3 py-2 text-right font-semibold text-indigo-700">{a.quota_gb} GB</td>
                       <td className="px-3 py-2 text-right text-gray-700">
                         <div className="flex items-center justify-end gap-2">
@@ -881,6 +906,25 @@ export function CampagneDetailPage() {
                   <div className="flex items-center justify-between text-xs">
                     <span className="text-indigo-700 font-semibold">{a.quota_gb} GB</span>
                     <span className="text-gray-700">{a.prix_cfa > 0 ? a.prix_cfa.toLocaleString('fr-FR') + ' F' : '—'}</span>
+                  </div>
+                  <div className="text-[10px] text-gray-500">
+                    {row.derniereAct ? (
+                      <>
+                        Dernière act. : {fmtDate(row.derniereAct)}
+                        {(() => {
+                          const echeanceMs = row.actMs + 30 * 86400_000;
+                          const overdue = echeanceMs <= Date.now();
+                          const soon = !overdue && echeanceMs <= Date.now() + 3 * 86400_000;
+                          return (
+                            <span className={overdue ? 'text-red-600 font-semibold' : soon ? 'text-amber-600 font-medium' : 'text-gray-400'}>
+                              {' '}→ échéance {fmtDate(new Date(echeanceMs).toISOString())}
+                            </span>
+                          );
+                        })()}
+                      </>
+                    ) : (
+                      <span className="text-amber-600">Jamais activé</span>
+                    )}
                   </div>
                   <div className="flex gap-2 pt-1">
                     <button

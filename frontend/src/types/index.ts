@@ -42,6 +42,9 @@ export interface Agent {
   zone: string | null;
   created_at: string;
   updated_at: string;
+  // Uniquement renseigné par /campagnes/:id/eligible-agents :
+  // date de la dernière transaction confirmée dans une campagne précédente
+  derniere_activation_le?: string | null;
 }
 
 export interface Responsable {
