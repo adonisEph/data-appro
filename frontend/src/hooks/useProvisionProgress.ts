@@ -25,10 +25,12 @@ export function useProvisionProgress(campagneId: number): ProvisionProgress {
   const { data, isLoading } = useQuery({
     queryKey: ['campagne-live', campagneId],
     queryFn: () => campagnesApi.get(campagneId),
-    // Polling actif uniquement si campagne en cours
+    // Polling actif uniquement si campagne en cours ET mode auto.
+    // En mode manuel la campagne reste 'en_cours' plusieurs jours : pas de polling,
+    // les données sont rafraîchies par invalidations (mutations + events MANUAL_*).
     refetchInterval: (query) => {
-      const statut = query.state.data?.campagne?.statut;
-      return statut === 'en_cours' ? 3000 : false;
+      const camp = query.state.data?.campagne;
+      return camp?.statut === 'en_cours' && camp.mode !== 'manuel' ? 3000 : false;
     },
     staleTime: 0,
   });
@@ -36,13 +38,15 @@ export function useProvisionProgress(campagneId: number): ProvisionProgress {
   const campagne = data?.campagne ?? null;
   const transactions = data?.transactions ?? [];
   const isLive = campagne?.statut === 'en_cours';
+  const isManual = campagne?.mode === 'manuel';
 
   const { data: eligibleData } = useQuery({
     queryKey: ['campagne-eligible-agents', campagneId],
     queryFn: () => campagnesApi.eligibleAgents(campagneId),
     enabled: Boolean(campagneId),
     staleTime: 0,
-    refetchInterval: isLive ? 5000 : false,
+    // Pas de polling en mode manuel (campagne 'en_cours' pendant des jours)
+    refetchInterval: isLive && !isManual ? 5000 : false,
   });
 
   const confirmesTx = transactions.filter(t => t.statut === 'confirme').length;

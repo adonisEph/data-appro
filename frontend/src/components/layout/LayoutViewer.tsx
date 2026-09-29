@@ -256,9 +256,8 @@ export function LayoutViewer() {
   const { data } = useQuery({
     queryKey: ['agents'],
     queryFn: agentsApi.list,
-    refetchInterval: 20_000,
-    refetchOnWindowFocus: true,
-    staleTime: 0,
+    // Pas de polling : les events AGENT_* / IMPORT_AGENTS invalident déjà ce cache toutes les 5s
+    staleTime: 60_000,
   });
 
   useEffect(() => {
@@ -353,8 +352,9 @@ export function LayoutViewer() {
             toInvalidate.add('agents');
             toInvalidate.add('stats');
           }
-          if (action.startsWith('CAMPAGNE_') || action.startsWith('PROVISION_') || action.startsWith('RELANCE_') || action.startsWith('WEBHOOK_')) {
+          if (action.startsWith('CAMPAGNE_') || action.startsWith('PROVISION_') || action.startsWith('RELANCE_') || action.startsWith('WEBHOOK_') || action.startsWith('MANUAL_')) {
             toInvalidate.add('campagnes');
+            toInvalidate.add('campagnes-viewer');
             toInvalidate.add('stats');
             if (typeof campagneId === 'number') toInvalidateCampagne.add(campagneId);
           }
@@ -425,8 +425,12 @@ export function LayoutViewer() {
         }
         for (const id of toInvalidateCampagne) {
           qc.invalidateQueries({ queryKey: ['campagnes'] });
+          qc.invalidateQueries({ queryKey: ['campagnes-viewer'] });
           qc.invalidateQueries({ queryKey: ['campagne', id] });
           qc.invalidateQueries({ queryKey: ['campagne-live', id] });
+          // Préfixe : la clé exacte varie selon les pages (id string vs number)
+          qc.invalidateQueries({ queryKey: ['campagne-viewer'] });
+          qc.invalidateQueries({ queryKey: ['campagne-eligible-agents'] });
         }
 
         // rerender header for badge/panel
@@ -452,7 +456,7 @@ export function LayoutViewer() {
     };
     const interval = window.setInterval(() => {
       if (!cancelled) tick();
-    }, 10_000);
+    }, 60_000);
     tick();
     return () => { cancelled = true; window.clearInterval(interval); };
   }, [location.pathname]);

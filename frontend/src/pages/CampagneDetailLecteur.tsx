@@ -13,7 +13,12 @@ export default function CampagneDetailLecteurPage() {
   const { data, isLoading } = useQuery({
     queryKey: ['campagne-viewer', id],
     queryFn: () => campagnesApi.get(Number(id)),
-    refetchInterval: (q) => q.state.data?.campagne?.statut === 'en_cours' ? 5000 : false,
+    // Pas de polling sur les campagnes manuelles (en_cours pendant des jours) —
+    // elles sont rafraîchies par les invalidations d'events MANUAL_*.
+    refetchInterval: (q) => {
+      const c = q.state.data?.campagne;
+      return c?.statut === 'en_cours' && c.mode !== 'manuel' ? 15_000 : false;
+    },
   });
 
   const campagne = data?.campagne;

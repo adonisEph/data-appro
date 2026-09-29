@@ -55,7 +55,7 @@ export function CampagnesPage() {
   const { data, isLoading } = useQuery({
     queryKey: ['campagnes'],
     queryFn: campagnesApi.list,
-    refetchInterval: 15_000,
+    refetchInterval: 60_000,   // les mutations invalident déjà ce cache via les events
     refetchOnWindowFocus: true,
     staleTime: 0,
   });
@@ -272,7 +272,9 @@ export function CampagneDetailPage() {
     }) => campagnesApi.manualValidate(Number(id), payload),
     onSuccess: () => {
       toast.success('Enregistré', 'Validation manuelle enregistrée.');
-      qc.invalidateQueries({ queryKey: ['campagne-live', id] });
+      qc.invalidateQueries({ queryKey: ['campagne-live', Number(id)] });
+      // eligible-agents filtre les agents déjà traités côté serveur pour les assistants
+      if (!isSuperAdmin && canProvision) qc.invalidateQueries({ queryKey: ['campagne-eligible-agents'] });
       qc.invalidateQueries({ queryKey: ['stats'] });
       setManualModal(null);
     },

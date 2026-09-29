@@ -13,7 +13,7 @@ export default function DashboardPage() {
   const { data, isLoading, dataUpdatedAt } = useQuery({
     queryKey: ['stats'],
     queryFn: historiqueApi.stats,
-    refetchInterval: 10_000,        // rafraîchit toutes les 10s
+    refetchInterval: 60_000,        // les events invalident déjà 'stats' en temps quasi réel
     refetchOnWindowFocus: true,     // rafraîchit quand on revient sur la page
     staleTime: 0,
   });

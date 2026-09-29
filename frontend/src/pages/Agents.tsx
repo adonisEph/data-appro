@@ -62,7 +62,7 @@ export default function AgentsPage() {
   const { data, isLoading, dataUpdatedAt } = useQuery({
     queryKey: ['agents'],
     queryFn: agentsApi.list,
-    refetchInterval: 15_000,
+    refetchInterval: 60_000,
     refetchOnWindowFocus: true,
     staleTime: 0,
   });

@@ -15,7 +15,7 @@ export default function CampagnesLecteurPage() {
   const { data, isLoading } = useQuery({
     queryKey: ['campagnes-viewer'],
     queryFn: campagnesApi.list,
-    refetchInterval: 30_000,
+    refetchInterval: 60_000,
   });
 
   const campagnes = (data?.campagnes ?? []).filter(c => {
