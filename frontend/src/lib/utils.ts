@@ -70,22 +70,29 @@ export function cleanTel(tel: string | null | undefined): string {
   return t;
 }
 
+// Chiffres significatifs du numéro — sans indicatif 242 ni 0 initial.
+// À utiliser pour les comparaisons et recherches, jamais pour l'affichage.
+export function telDigits(tel: string | null | undefined): string {
+  let t = (tel ?? '').replace(/\D/g, '');
+  if (t.startsWith('242') && t.length > 9) t = t.slice(3);
+  if (t.startsWith('0')) t = t.replace(/^0+/, '');
+  return t;
+}
+
+// Numéro local canonique, toujours préfixé par 0 (ex: "052051040").
+// À utiliser pour l'affichage compact, la copie et les exports.
+export function telLocal(tel: string | null | undefined): string {
+  const d = telDigits(tel);
+  return d ? '0' + d : '';
+}
+
+// Format affichable, toujours préfixé par 0 : "052051040" → "05 205 1040"
 export function fmtTelephone(tel: string | null | undefined): string {
-  if (!tel) return '—';
-  const t = tel.replace(/\D/g, '');
-  // 8 chiffres (format nettoyé): "05205104" → "05 205 104"
-  if (t.length === 8) {
-    return `${t.slice(0, 2)} ${t.slice(2, 5)} ${t.slice(5)}`;
-  }
-  // 9 chiffres avec 0: "052051040" → "05 205 1040"
-  if (t.length === 9 && t.startsWith('0')) {
-    return `${t.slice(0, 2)} ${t.slice(2, 5)} ${t.slice(5)}`;
-  }
-  // Ancien format 242: "242052051040" → "+242 05 205 1040"
-  if (t.startsWith('242') && t.length === 12) {
-    return `+242 ${t.slice(3, 5)} ${t.slice(5, 8)} ${t.slice(8)}`;
-  }
-  return tel;
+  const local = telLocal(tel);
+  if (!local) return '—';
+  if (local.length <= 2) return local;
+  if (local.length <= 5) return `${local.slice(0, 2)} ${local.slice(2)}`;
+  return `${local.slice(0, 2)} ${local.slice(2, 5)} ${local.slice(5)}`;
 }
 
 // ── Pourcentage ───────────────────────────────────────────────

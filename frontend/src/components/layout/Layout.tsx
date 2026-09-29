@@ -5,6 +5,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '../../hooks/useAuth';
 import { usePWA } from '../../hooks/usePWA';
 import { agentsApi, auditLogsApi, eventsApi, sessionsApi } from '../../lib/api';
+import { fmtTelephone, telLocal } from '../../lib/utils';
 import { useToast } from '../ui/Toast';
 import type { Agent } from '../../types';
 import * as XLSX from 'xlsx';
@@ -19,7 +20,7 @@ function safeJsonParse<T>(value: unknown): T | null {
 function fmtAgentLabel(d: { nom?: string; prenom?: string; telephone?: string } | null, fallbackAgentId: number | null) {
   const nom = (d?.nom ?? '').trim();
   const prenom = (d?.prenom ?? '').trim();
-  const tel = (d?.telephone ?? '').trim();
+  const tel = telLocal(d?.telephone);
   const name = `${prenom} ${nom}`.trim();
   if (name && tel) return `${name} · ${tel}`;
   if (name) return name;
@@ -260,7 +261,7 @@ export function Layout() {
           action: l.action,
           responsable: l.responsable_email ?? '',
           agent: agent || (l.agent_id ? `Agent #${l.agent_id}` : ''),
-          telephone: l.agent_telephone ?? '',
+          telephone: telLocal(l.agent_telephone),
           resume,
           details: details ? JSON.stringify(details) : (l.details ?? ''),
           ip: l.ip_address ?? '',
@@ -898,7 +899,7 @@ export function Layout() {
                                     <span className="text-[10px] text-gray-500 bg-gray-100 px-2 py-0.5 rounded-full">{l.responsable_email}</span>
                                   ) : null}
                                 </div>
-                                <p className="text-xs text-gray-500 truncate mt-0.5">{agent || (l.agent_id ? `Agent #${l.agent_id}` : '—')}{l.agent_telephone ? ` · ${l.agent_telephone}` : ''}</p>
+                                <p className="text-xs text-gray-500 truncate mt-0.5">{agent || (l.agent_id ? `Agent #${l.agent_id}` : '—')}{l.agent_telephone ? ` · ${fmtTelephone(l.agent_telephone)}` : ''}</p>
                                 {msg ? <p className="text-xs text-gray-400 mt-0.5">{msg}</p> : null}
                               </div>
                               <div className="text-right shrink-0">

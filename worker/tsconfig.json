@@ -10,6 +10,7 @@
     "noImplicitReturns": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
+    "rootDir": "src",
     "outDir": "dist"
   },
   "include": ["src/**/*.ts"],

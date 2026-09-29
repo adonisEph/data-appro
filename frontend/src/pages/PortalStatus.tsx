@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { portalApi } from '../lib/api';
+import { fmtTelephone } from '../lib/utils';
 import { usePWA } from '../hooks/usePWA';
 import { APP_VERSION } from '../config/version';
 
@@ -136,7 +137,7 @@ export default function PortalStatus() {
               </div>
               <div>
                 <h1 className="text-xl font-bold leading-tight">{agent.prenom} {agent.nom}</h1>
-                <p className="text-sm text-white/80">{agent.telephone}</p>
+                <p className="text-sm text-white/80">{fmtTelephone(agent.telephone)}</p>
               </div>
             </div>
 

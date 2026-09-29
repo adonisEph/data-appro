@@ -9,7 +9,7 @@ import { ConfirmModal } from '../components/ui/ConfirmModal';
 import { Card, Button, Modal, Spinner, EmptyState } from '../components/ui';
 import { ROLE_QUOTAS, type Role, type Agent } from '../types';
 import { useAuth } from '../hooks/useAuth';
-import { fmtTelephone, cleanTel } from '../lib/utils';
+import { fmtTelephone, telLocal, telDigits } from '../lib/utils';
 
 const ROLES: Role[] = ['technicien', 'responsable_junior', 'responsable_senior', 'manager'];
 const ROLE_INTERNAL_LABELS: Record<Role, string> = {
@@ -239,16 +239,10 @@ export default function AgentsPage() {
     }
   };
 
-  const normalizeTel = (v: string) => {
-    let t = String(v ?? '').replace(/\D+/g, '');
-    if (t.startsWith('242') && t.length > 9) t = t.slice(3);
-    return t;
-  };
-
   const openTracked = () => {
     const trackedAgents = trackedData?.tracked_agents ?? [];
     if (trackedAgents.length > 0) {
-      setTrackedText(trackedAgents.map(a => a.telephone).join('\n'));
+      setTrackedText(trackedAgents.map(a => telLocal(a.telephone)).join('\n'));
     } else {
       setTrackedText('');
     }
@@ -262,7 +256,8 @@ export default function AgentsPage() {
     const s = search.toLowerCase();
     const matchSearch = !search ||
       a.nom.toLowerCase().includes(s) || a.prenom.toLowerCase().includes(s) ||
-      a.telephone.includes(search) || (a.role_label ?? '').toLowerCase().includes(s);
+      (a.role_label ?? '').toLowerCase().includes(s) ||
+      (telDigits(search) !== '' && telDigits(a.telephone).includes(telDigits(search)));
     const matchRole = !filterRole || a.role === filterRole || a.role_label === filterRole;
     const matchQuota = filterQuotaGb === null || a.quota_gb === filterQuotaGb;
     return matchSearch && matchRole && matchQuota;
@@ -297,7 +292,7 @@ export default function AgentsPage() {
       ID: a.id,
       Prenom: a.prenom,
       Nom: a.nom,
-      Telephone: a.telephone,
+      Telephone: telLocal(a.telephone),
       Client: a.client ?? '',
       Zone: a.zone ?? '',
       Quota_GB: a.quota_gb,
@@ -335,7 +330,7 @@ export default function AgentsPage() {
         <td class="center">${a.zone ?? '—'}</td>
         <td class="center">${a.quota_gb} GB</td>
         <td class="right">${a.prix_cfa > 0 ? a.prix_cfa.toLocaleString('fr-FR') + ' F' : '—'}</td>
-        <td class="tel">${cleanTel(a.telephone)}</td>
+        <td class="tel">${telLocal(a.telephone)}</td>
         <td class="center"><span class="badge">Éligible</span></td>
       </tr>
     `).join('');
@@ -950,7 +945,7 @@ export default function AgentsPage() {
               variant="secondary"
               onClick={() => {
                 const trackedAgents = trackedData?.tracked_agents ?? [];
-                setTrackedText(trackedAgents.map(a => a.telephone).join('\n'));
+                setTrackedText(trackedAgents.map(a => telLocal(a.telephone)).join('\n'));
               }}
             >
               Réinitialiser
@@ -968,7 +963,7 @@ export default function AgentsPage() {
                   const byTel = new Map<string, Agent>();
                   const byId = new Map<number, Agent>();
                   agents.forEach(a => {
-                    byTel.set(normalizeTel(a.telephone), a);
+                    byTel.set(telDigits(a.telephone), a);
                     byId.set(a.id, a);
                   });
 
@@ -984,8 +979,7 @@ export default function AgentsPage() {
                       ids.push(maybeId);
                       continue;
                     }
-                    const tel = normalizeTel(t);
-                    const a = byTel.get(tel);
+                    const a = byTel.get(telDigits(t));
                     if (a) ids.push(a.id);
                   }
 
@@ -1138,7 +1132,7 @@ export default function AgentsPage() {
               <div className="space-y-2">
                 {qualityReport.phone_duplicates.map(d => (
                   <div key={d.telephone} className="border border-red-200 bg-red-50 rounded-lg p-3">
-                    <p className="text-xs font-mono text-red-900">{d.telephone}</p>
+                    <p className="text-xs font-mono text-red-900">{telLocal(d.telephone)}</p>
                     <div className="mt-1 text-xs text-red-800">
                       {d.agents.map(a => (
                         <div key={a.id} className="flex items-center justify-between">
@@ -1180,7 +1174,7 @@ export default function AgentsPage() {
                     <div className="mt-1 text-xs text-gray-700">
                       {d.agents.map(a => (
                         <div key={a.id} className="flex items-center justify-between">
-                          <span>#{a.id} — {a.telephone}</span>
+                          <span>#{a.id} — {telLocal(a.telephone)}</span>
                           <span className={a.actif ? 'text-green-700' : 'text-gray-500'}>{a.actif ? 'actif' : 'inactif'}</span>
                         </div>
                       ))}
@@ -1254,7 +1248,7 @@ export default function AgentsPage() {
                 <tbody className="divide-y divide-gray-100">
                   {importPreview.slice(0, 100).map((a, i) => (
                     <tr key={i}>
-                      <td className="px-3 py-2 font-mono">{a.telephone}</td>
+                      <td className="px-3 py-2 font-mono">{telLocal(a.telephone)}</td>
                       <td className="px-3 py-2 font-bold text-indigo-700">{a.forfait_label} — {a.quota_gb} GB</td>
                       <td className="px-3 py-2 text-right">{a.prix_cfa > 0 ? `${a.prix_cfa.toLocaleString()} F` : '—'}</td>
                     </tr>

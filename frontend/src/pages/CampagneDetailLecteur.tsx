@@ -3,7 +3,7 @@ import { useParams, Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { campagnesApi } from '../lib/api';
 import { Card, CampagneBadge, TxBadge, ProgressBar, Spinner } from '../components/ui';
-import { fmtFCFA, fmtMois, fmtTelephone, fmtDateTime, fmtPct } from '../lib/utils';
+import { fmtFCFA, fmtMois, fmtTelephone, fmtDateTime, fmtPct, telDigits } from '../lib/utils';
 
 export default function CampagneDetailLecteurPage() {
   const { id } = useParams<{ id: string }>();
@@ -25,7 +25,8 @@ export default function CampagneDetailLecteurPage() {
   const allTransactions = data?.transactions ?? [];
   const transactions = allTransactions.filter(tx => {
     const matchS = !filterStatut || tx.statut === filterStatut;
-    const matchR = !search || tx.telephone.includes(search) || `${tx.nom ?? ''} ${tx.prenom ?? ''}`.toLowerCase().includes(search.toLowerCase());
+    const matchR = !search || `${tx.nom ?? ''} ${tx.prenom ?? ''}`.toLowerCase().includes(search.toLowerCase()) ||
+      (telDigits(search) !== '' && telDigits(tx.telephone).includes(telDigits(search)));
     return matchS && matchR;
   });
 

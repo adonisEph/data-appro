@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, memo } from 'react';
 import { clsx } from 'clsx';
 import { sessionsApi } from '../../lib/api';
+import { fmtTelephone } from '../../lib/utils';
 import { useToast } from '../ui/Toast';
 import * as XLSX from 'xlsx';
 
@@ -185,7 +186,7 @@ function SessionPanelInner({ open, onClose }: SessionPanelProps) {
                         {s.is_super_admin ? <span className="text-[10px] font-bold text-amber-700 bg-amber-100 px-2 py-0.5 rounded-full">★ Admin</span> : null}
                         {s.is_viewer ? <span className="text-[10px] font-bold text-gray-600 bg-gray-100 px-2 py-0.5 rounded-full">Viewer</span> : null}
                       </div>
-                      <p className="text-xs text-gray-500 truncate mt-0.5">{s.email}{s.telephone ? ` · ${s.telephone}` : ''}</p>
+                      <p className="text-xs text-gray-500 truncate mt-0.5">{s.email}{s.telephone ? ` · ${fmtTelephone(s.telephone)}` : ''}</p>
                       <p className="text-xs text-gray-400 truncate mt-0.5">{s.path ?? '-'}{s.page_title ? ` · ${s.page_title}` : ''}</p>
                     </div>
                     <div className="text-right shrink-0 flex flex-col items-end gap-1">
@@ -300,7 +301,7 @@ function SessionPanelInner({ open, onClose }: SessionPanelProps) {
                           </p>
                           <span className="text-[10px] font-bold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded-full">{e.event_type}</span>
                         </div>
-                        <p className="text-xs text-gray-500 truncate mt-0.5">{e.email}{e.telephone ? ` · ${e.telephone}` : ''}{e.ip_address ? ` · ${e.ip_address}` : ''}</p>
+                        <p className="text-xs text-gray-500 truncate mt-0.5">{e.email}{e.telephone ? ` · ${fmtTelephone(e.telephone)}` : ''}{e.ip_address ? ` · ${e.ip_address}` : ''}</p>
                         <p className="text-xs text-gray-400 truncate mt-0.5">{e.path ?? '-'}{e.page_title ? ` · ${e.page_title}` : ''}</p>
                       </div>
                       <div className="text-right shrink-0">

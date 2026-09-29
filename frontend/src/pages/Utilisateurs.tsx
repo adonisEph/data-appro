@@ -6,7 +6,7 @@ import { ConfirmModal } from '../components/ui/ConfirmModal';
 import { Card, Button, RoleBadge, Modal, Spinner, EmptyState } from '../components/ui';
 import { useAuth } from '../hooks/useAuth';
 import type { Responsable } from '../types';
-import { fmtDateTime } from '../lib/utils';
+import { fmtDateTime, fmtTelephone } from '../lib/utils';
 
 const DROITS_LABELS = {
   can_import_agents:   'Importer des agents',
@@ -294,7 +294,7 @@ export default function UtilisateursPage() {
                           return (
                             <div className="text-xs">
                               <p className="text-gray-900 font-medium">{a.prenom} {a.nom}</p>
-                              <p className="text-gray-500 font-mono">{a.telephone}</p>
+                              <p className="text-gray-500 font-mono">{fmtTelephone(a.telephone)}</p>
                             </div>
                           );
                         })() : (
@@ -391,12 +391,12 @@ export default function UtilisateursPage() {
             />
             <datalist id="agents-list">
               {agents.map(a => (
-                <option key={a.id} value={`${a.prenom} ${a.nom} · ${a.telephone} (#${a.id})`} />
+                <option key={a.id} value={`${a.prenom} ${a.nom} · ${fmtTelephone(a.telephone)} (#${a.id})`} />
               ))}
             </datalist>
             {selectedAgent ? (
               <p className="text-xs text-gray-500 mt-1">
-                Sélectionné: <span className="font-semibold">{selectedAgent.prenom} {selectedAgent.nom}</span> · {selectedAgent.telephone}
+                Sélectionné: <span className="font-semibold">{selectedAgent.prenom} {selectedAgent.nom}</span> · {fmtTelephone(selectedAgent.telephone)}
               </p>
             ) : (
               <p className="text-xs text-gray-400 mt-1">Choisissez un agent existant pour le transformer en utilisateur.</p>
@@ -653,7 +653,7 @@ export default function UtilisateursPage() {
                     />
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium text-gray-900 truncate">{a.prenom} {a.nom}</p>
-                      <p className="text-xs text-gray-500">{a.telephone} · {a.quota_gb} GB · {a.prix_cfa > 0 ? a.prix_cfa.toLocaleString('fr-FR') + ' F' : '—'}</p>
+                      <p className="text-xs text-gray-500">{fmtTelephone(a.telephone)} · {a.quota_gb} GB · {a.prix_cfa > 0 ? a.prix_cfa.toLocaleString('fr-FR') + ' F' : '—'}</p>
                     </div>
                   </label>
                 ))}

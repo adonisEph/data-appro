@@ -11,7 +11,7 @@ import {
   Card, Button, CampagneBadge, TxBadge, RoleBadge,
   ProgressBar, Spinner, EmptyState, Modal,
 } from '../components/ui';
-import { fmtFCFA, fmtMois, fmtTelephone, fmtPct, fmtDate, cleanTel } from '../lib/utils';
+import { fmtFCFA, fmtMois, fmtTelephone, fmtPct, fmtDate, telLocal, telDigits } from '../lib/utils';
 import * as XLSX from 'xlsx';
 import { ROLE_QUOTAS } from '../types';
 
@@ -363,7 +363,7 @@ export function CampagneDetailPage() {
 
       return {
         'Agent': `${tx.prenom ?? ''} ${tx.nom ?? ''}`.trim(),
-        'Téléphone': cleanTel(tx.telephone),
+        'Téléphone': telLocal(tx.telephone),
         'Option': tx.option_used === 'argent' ? 'Argent' : 'Forfait',
         'Quota (GB)': quota,
         'Montant (FCFA)': montant,
@@ -409,8 +409,8 @@ export function CampagneDetailPage() {
   const filteredTx = transactions.filter(tx => {
     const matchStatut = !filterStatut || tx.statut === filterStatut;
     const matchSearch = !search ||
-      tx.telephone.includes(search) ||
-      `${tx.nom ?? ''} ${tx.prenom ?? ''}`.toLowerCase().includes(search.toLowerCase());
+      `${tx.nom ?? ''} ${tx.prenom ?? ''}`.toLowerCase().includes(search.toLowerCase()) ||
+      (telDigits(search) !== '' && telDigits(tx.telephone).includes(telDigits(search)));
     return matchStatut && matchSearch;
   });
 
@@ -447,8 +447,8 @@ export function CampagneDetailPage() {
     if (manualSearch.trim()) {
       const q = manualSearch.toLowerCase().trim();
       const name = `${row.a.prenom ?? ''} ${row.a.nom ?? ''}`.toLowerCase();
-      const tel = cleanTel(row.a.telephone).toLowerCase();
-      if (!name.includes(q) && !tel.includes(q)) return false;
+      const qDigits = telDigits(manualSearch);
+      if (!name.includes(q) && !(qDigits !== '' && telDigits(row.a.telephone).includes(qDigits))) return false;
     }
     return true;
   });
@@ -757,11 +757,11 @@ export function CampagneDetailPage() {
                       </td>
                       <td className="px-3 py-2">
                         <div className="flex items-center gap-2">
-                          <span className="font-mono text-xs text-gray-600">{cleanTel(a.telephone)}</span>
+                          <span className="font-mono text-xs text-gray-600">{telLocal(a.telephone)}</span>
                           <button
                             onClick={async () => {
                               try {
-                                await navigator.clipboard.writeText(cleanTel(a.telephone));
+                                await navigator.clipboard.writeText(telLocal(a.telephone));
                                 toast.success('Copié', 'Téléphone copié.');
                               } catch {
                                 toast.error('Erreur', 'Impossible de copier.');
@@ -890,11 +890,11 @@ export function CampagneDetailPage() {
                     )}
                   </div>
                   <div className="flex items-center gap-2 text-xs">
-                    <span className="font-mono text-gray-600">{cleanTel(a.telephone)}</span>
+                    <span className="font-mono text-gray-600">{telLocal(a.telephone)}</span>
                     <button
                       onClick={async () => {
                         try {
-                          await navigator.clipboard.writeText(cleanTel(a.telephone));
+                          await navigator.clipboard.writeText(telLocal(a.telephone));
                           toast.success('Copié', 'Téléphone copié.');
                         } catch {
                           toast.error('Erreur', 'Impossible de copier.');
@@ -974,7 +974,7 @@ export function CampagneDetailPage() {
         {manualModal && (
           <div className="space-y-4">
             <div className="bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-xs text-gray-700">
-              <p><strong>Téléphone :</strong> <span className="font-mono">{cleanTel(manualModal.telephone)}</span></p>
+              <p><strong>Téléphone :</strong> <span className="font-mono">{telLocal(manualModal.telephone)}</span></p>
               <p><strong>Rappel :</strong> exécute l'action dans Airtel Money, puis colle le SMS complet.</p>
             </div>
 
@@ -1162,7 +1162,7 @@ export function CampagneDetailPage() {
                 {filteredTx.map(tx => (
                   <tr key={tx.id} className="hover:bg-gray-50">
                     <td className="px-4 py-3 font-medium text-gray-900">{tx.prenom} {tx.nom}</td>
-                    <td className="px-4 py-3 font-mono text-xs text-gray-600">{cleanTel(tx.telephone)}</td>
+                    <td className="px-4 py-3 font-mono text-xs text-gray-600">{telLocal(tx.telephone)}</td>
                     <td className="px-4 py-3 text-xs text-gray-600 whitespace-nowrap">{tx.client ?? '—'}</td>
                     <td className="px-4 py-3 text-xs text-gray-600 whitespace-nowrap">{tx.zone ?? '—'}</td>
                     <td className="px-4 py-3">{tx.role && <RoleBadge role={tx.role} />}</td>

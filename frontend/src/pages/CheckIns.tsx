@@ -2,7 +2,7 @@ import { useState, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { portalApi } from '../lib/api';
 import { Spinner } from '../components/ui';
-import { fmtDateTime } from '../lib/utils';
+import { fmtDateTime, fmtTelephone, telDigits } from '../lib/utils';
 
 export default function CheckInsPage() {
   const [limit, setLimit] = useState(100);
@@ -28,9 +28,8 @@ export default function CheckInsPage() {
         if (!full.includes(q)) return false;
       }
       if (searchPhone.trim()) {
-        const q = searchPhone.replace(/\D/g, '');
-        const tel = (ci.telephone ?? '').replace(/\D/g, '');
-        if (!tel.includes(q)) return false;
+        const q = telDigits(searchPhone);
+        if (q && !telDigits(ci.telephone).includes(q)) return false;
       }
       if (dateFrom) {
         const d = new Date(ci.created_at);
@@ -212,7 +211,7 @@ export default function CheckInsPage() {
                         </div>
                       </div>
                     </td>
-                    <td className="px-4 py-3.5 text-sm text-gray-700 font-mono whitespace-nowrap">{ci.telephone}</td>
+                    <td className="px-4 py-3.5 text-sm text-gray-700 font-mono whitespace-nowrap">{fmtTelephone(ci.telephone)}</td>
                     <td className="px-4 py-3.5 text-xs text-gray-600 whitespace-nowrap">{ci.client ?? '—'}</td>
                     <td className="px-4 py-3.5 text-xs text-gray-600 whitespace-nowrap">{ci.zone ?? '—'}</td>
                     <td className="px-4 py-3.5 text-center whitespace-nowrap">

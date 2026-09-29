@@ -22,6 +22,14 @@ function cleanTelephone(raw: string): string {
   return n;
 }
 
+// Numéro local pour affichage/exports — toujours préfixé par 0 (ex: "052051040")
+function telDisplay(raw: unknown): string {
+  let n = String(raw ?? '').replace(/\D/g, '');
+  if (n.startsWith('242') && n.length > 9) n = n.slice(3);
+  if (n.startsWith('0')) n = n.replace(/^0+/, '');
+  return n ? '0' + n : '';
+}
+
 function isTrackedAgentId(trackedSet: Set<number>, agentId: unknown): boolean {
   const id = typeof agentId === 'number' ? agentId : Number(agentId);
   return Number.isFinite(id) && trackedSet.has(id);
@@ -103,7 +111,7 @@ smsRouter.post('/inbound', async c => {
 smsRouter.get('/suggestions', authMiddleware, async c => {
   const q = c.req.query();
   const telephone = q.telephone ? String(q.telephone) : '';
-  const normalizedTel = telephone.replace(/\D/g, '').trim();
+  const normalizedTel = normalizePhone(telephone);
   if (!normalizedTel) return c.json({ error: 'telephone requis' }, 400);
 
   const limit = Math.min(20, Math.max(1, q.limit ? Number(q.limit) : 5));
@@ -1058,7 +1066,7 @@ sessionsRouter.get('/history.csv', superAdminMiddleware, async c => {
     r['email'],
     r['nom'] ?? '',
     r['prenom'] ?? '',
-    r['telephone'] ?? '',
+    telDisplay(r['telephone']),
     r['event_type'],
     r['path'] ?? '',
     r['page_title'] ?? '',
@@ -1781,7 +1789,7 @@ historiqueRouter.get('/transactions', async c => {
   if (statut)      { query += ' AND t.statut = ?';      params.push(statut); }
   if (mois)        { query += ' AND c.mois = ?';        params.push(mois); }
   if (telephone)   {
-    const normalizedTel = String(telephone).replace(/\D/g, '').trim();
+    const normalizedTel = normalizePhone(String(telephone));
     query += ' AND t.telephone LIKE ?';
     params.push(`%${normalizedTel || telephone}%`);
   }
@@ -1856,9 +1864,12 @@ api.route('/historique', historiqueRouter);
 // ══════════════════════════════════════════════════════════
 const portalRouter = new Hono<AppEnv>();
 
-// Normaliser un numéro de téléphone (chiffres uniquement)
+// Normaliser un numéro de téléphone (chiffres significatifs: sans 242 ni 0 initial)
 function normalizePhone(raw: string): string {
-  return raw.replace(/\D/g, '').trim();
+  let n = raw.replace(/\D/g, '').trim();
+  if (n.startsWith('242') && n.length > 9) n = n.slice(3);
+  if (n.startsWith('0')) n = n.replace(/^0+/, '');
+  return n;
 }
 
 // POST /portal/login — authentification par numéro uniquement
@@ -2119,7 +2130,7 @@ relanceRouter.get('/campagnes/:id/export.csv', async c => {
     : rowsAll.filter(r => !isTrackedAgentId(trackedSet, r['agent_id']));
   const headers = ['Nom','Prénom','Téléphone','Rôle technique','Poste','Option','Statut','ID Airtel','Référence','Message','Montant FCFA','Date tentative','Date confirmation','Nb tentatives'];
   const rows = rowsRaw.map(r =>
-    [r['nom'],r['prenom'],r['telephone'],r['role'],r['role_label']??'',r['option_used'],r['statut'],
+    [r['nom'],r['prenom'],telDisplay(r['telephone']),r['role'],r['role_label']??'',r['option_used'],r['statut'],
      r['airtel_transaction_id']??'',r['airtel_reference']??'',r['airtel_message']??'',
      r['montant_fcfa']??'',r['tente_le'],r['confirme_le']??'',r['nb_tentatives']]
     .map(v => `"${String(v??'').replace(/"/g,'""')}"`).join(',')

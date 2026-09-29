@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { portalApi } from '../lib/api';
 import { Spinner } from '../components/ui';
-import { fmtDateTime } from '../lib/utils';
+import { fmtDateTime, fmtTelephone } from '../lib/utils';
 import { useAuth } from '../hooks/useAuth';
 
 const STATUT_LABELS: Record<string, string> = {
@@ -116,7 +116,7 @@ export default function ReclamationsPage() {
                       </div>
                       <div className="min-w-0">
                         <p className="text-sm font-bold text-gray-900 truncate">{r.prenom} {r.nom}</p>
-                        <p className="text-xs text-gray-500">{r.telephone} · {fmtDateTime(r.created_at)}</p>
+                        <p className="text-xs text-gray-500">{fmtTelephone(r.telephone)} · {fmtDateTime(r.created_at)}</p>
                       </div>
                       <span className={`inline-flex items-center gap-1 text-[10px] font-bold px-2.5 py-1 rounded-full ${st.bg} ${st.text}`}>
                         <span className={`w-1.5 h-1.5 rounded-full ${st.dot}`} />
