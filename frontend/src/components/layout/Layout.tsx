@@ -470,7 +470,9 @@ export function Layout() {
       }
     };
 
-    const interval = window.setInterval(tick, 5000);
+    // 15 s au lieu de 5 s : le quota D1 "rows read" est facturé par ligne
+    // scannée — ce polling tourne dans chaque onglet ouvert en permanence.
+    const interval = window.setInterval(tick, 15000);
     tick();
     return () => { cancelled = true; window.clearInterval(interval); };
   }, [qc, user?.email]);

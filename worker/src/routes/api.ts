@@ -344,24 +344,25 @@ agentsRouter.get('/', async c => {
   const user = c.get('user') as JWTPayload;
   const isSuperAdmin = Boolean(user?.is_super_admin);
 
-  const totalActive = await c.env.DB.prepare(
-    `SELECT COUNT(*) as n FROM agents WHERE actif = 1`
-  ).first<{ n: number }>();
-  const budgetTotalAgents = await c.env.DB.prepare(
-    `SELECT COALESCE(SUM(COALESCE(prix_cfa, 0)), 0) as n FROM agents WHERE actif = 1`
-  ).first<{ n: number }>();
-
   const { results } = await c.env.DB.prepare(
     `SELECT * FROM agents WHERE actif = 1 ORDER BY nom, prenom`
   ).all<Record<string, unknown>>();
 
   const agentsAll = results ?? [];
+  // Compteurs calculés sur la liste déjà lue : évite 2 scans supplémentaires
+  // (COUNT + SUM) à chaque appel — le quota D1 compte les lignes lues.
+  const totalActive = agentsAll.length;
+  const budgetTotalAgents = agentsAll.reduce(
+    (sum, a) => sum + (Number((a as { prix_cfa?: unknown }).prix_cfa) || 0),
+    0,
+  );
+
   if (isSuperAdmin) {
     return c.json({
       agents: agentsAll,
       total: agentsAll.length,
-      total_active: totalActive?.n ?? agentsAll.length,
-      budget_total_agents: budgetTotalAgents?.n ?? 0,
+      total_active: totalActive,
+      budget_total_agents: budgetTotalAgents,
     });
   }
 
@@ -370,8 +371,8 @@ agentsRouter.get('/', async c => {
   return c.json({
     agents,
     total: agents.length,
-    total_active: totalActive?.n ?? agentsAll.length,
-    budget_total_agents: budgetTotalAgents?.n ?? 0,
+    total_active: totalActive,
+    budget_total_agents: budgetTotalAgents,
   });
 });
 
@@ -1333,23 +1334,23 @@ campagnesRouter.get('/:id/eligible-agents', async c => {
 
   const cutoff = campagne.lance_le ?? campagne.created_at;
 
-  const totalAll = await c.env.DB.prepare(
-    `SELECT COUNT(*) as n FROM agents
+  // Un seul scan de la table agents pour les 3 compteurs (avant : 3 scans).
+  const stats = await c.env.DB.prepare(
+    `SELECT COUNT(*) AS total_all,
+            SUM(CASE WHEN actif = 1 THEN 1 ELSE 0 END) AS total_active,
+            COALESCE(SUM(CASE WHEN actif = 0 AND datetime(updated_at) > datetime(?)
+                              THEN COALESCE(prix_cfa, 0) ELSE 0 END), 0) AS deleted_budget
+     FROM agents
      WHERE datetime(created_at) <= datetime(?)`
-  ).bind(cutoff).first<{ n: number }>();
+  ).bind(cutoff, cutoff).first<{ total_all: number; total_active: number | null; deleted_budget: number }>();
 
-  const totalActive = await c.env.DB.prepare(
-    `SELECT COUNT(*) as n FROM agents
-     WHERE actif = 1 AND datetime(created_at) <= datetime(?)`
-  ).bind(cutoff).first<{ n: number }>();
+  const totalAll = { n: stats?.total_all ?? 0 };
+  const totalActive = { n: stats?.total_active ?? 0 };
+  const deletedBudget = { s: stats?.deleted_budget ?? 0 };
 
-  const deletedBudget = await c.env.DB.prepare(
-    `SELECT COALESCE(SUM(COALESCE(prix_cfa, 0)), 0) as s FROM agents
-     WHERE actif = 0
-       AND datetime(created_at) <= datetime(?)
-       AND datetime(updated_at) > datetime(?)`
-  ).bind(cutoff, cutoff).first<{ s: number }>();
-
+  // Sous-requête corrélée sur transactions(agent_id) : mesurée plus légère en
+  // rows read que la jointure pré-agrégée (index probe par agent vs scan
+  // complet de la table transactions).
   const { results } = await c.env.DB.prepare(
     `SELECT a.*,
             (SELECT MAX(COALESCE(t.confirme_le, t.tente_le))
@@ -1843,9 +1844,11 @@ historiqueRouter.get('/transactions/:id/preuve', async c => {
 });
 
 historiqueRouter.get('/stats', async c => {
-  const totalAgents    = await c.env.DB.prepare(`SELECT COUNT(*) as n FROM agents WHERE actif = 1`).first<{ n: number }>();
+  // Un seul scan de la table agents pour COUNT + SUM (quota D1 rows read).
+  const agentsStats    = await c.env.DB.prepare(`SELECT COUNT(*) as n, COALESCE(SUM(prix_cfa), 0) as s FROM agents WHERE actif = 1`).first<{ n: number; s: number }>();
+  const totalAgents    = { n: agentsStats?.n ?? 0 };
+  const budgetAgents   = { n: agentsStats?.s ?? 0 };
   const totalCampagnes = await c.env.DB.prepare(`SELECT COUNT(*) as n FROM campagnes`).first<{ n: number }>();
-  const budgetAgents   = await c.env.DB.prepare(`SELECT COALESCE(SUM(prix_cfa), 0) as n FROM agents WHERE actif = 1`).first<{ n: number }>();
   const lastCampagne   = await c.env.DB.prepare(`SELECT * FROM campagnes ORDER BY mois DESC LIMIT 1`).first();
   const txStats        = await c.env.DB.prepare(`SELECT statut, COUNT(*) as n FROM transactions GROUP BY statut`).all<{ statut: string; n: number }>();
   return c.json({
