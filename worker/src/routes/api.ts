@@ -410,6 +410,9 @@ agentsRouter.get('/quality-check', async c => {
   const invalidPhones: Array<{ id: number; nom: string; prenom: string; telephone: string; actif: number }> = [];
 
   for (const a of agents) {
+    // Les lignes désactivées ont leur numéro anonymisé ('DEL-<id>') — hors contrôles téléphone.
+    if (a.actif !== 1) continue;
+
     const tel = normalizePhone(a.telephone);
 
     // Validation simple: digits only, longueur 8 à 15
@@ -635,6 +638,7 @@ agentsRouter.put('/:id', noViewerMiddleware, async c => {
   if (body.prix_cfa      !== undefined) { updates.push('prix_cfa = ?');       values.push(body.prix_cfa); }
   if (body.forfait_label !== undefined) { updates.push('forfait_label = ?');  values.push(body.forfait_label); }
   if (body.actif         !== undefined) { updates.push('actif = ?');          values.push(body.actif); }
+  if (body.actif === 0)                   { updates.push("telephone = 'DEL-' || id"); }
   if (body.role          !== undefined) { updates.push('role = ?');           values.push(body.role); }
   if (body.client        !== undefined) { updates.push('client = ?');         values.push(body.client); }
   if (body.zone          !== undefined) { updates.push('zone = ?');           values.push(body.zone); }
@@ -675,7 +679,7 @@ agentsRouter.delete('/:id', superAdminMiddleware, async c => {
   const id = Number(c.req.param('id'));
   const agent = await c.env.DB.prepare(`SELECT * FROM agents WHERE id = ?`).bind(id).first();
   if (!agent) return c.json({ error: 'Agent introuvable' }, 404);
-  await c.env.DB.prepare(`UPDATE agents SET actif = 0, updated_at = datetime('now') WHERE id = ?`).bind(id).run();
+  await c.env.DB.prepare(`UPDATE agents SET actif = 0, telephone = 'DEL-' || id, updated_at = datetime('now') WHERE id = ?`).bind(id).run();
 
   // Si l'agent est supprimé pendant une campagne en cours, le traiter comme confirmé
   // (pour que les compteurs/budgets/progression et l'historique reflètent la réalité).
