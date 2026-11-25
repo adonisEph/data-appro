@@ -397,6 +397,13 @@ agentsRouter.get('/quality-check', async c => {
   const agents = (allAgents ?? []).filter(a => isSuperAdmin || !trackedSet.has(a.id));
 
   const normalizePhone = (s: string) => (s ?? '').replace(/\s+/g, '').trim();
+  // Chiffres significatifs: détecte les doublons inter-formats (52051040 = 052051040 = 242052051040)
+  const sigPhone = (s: string) => {
+    let t = (s ?? '').replace(/\D/g, '');
+    if (t.startsWith('242') && t.length > 9) t = t.slice(3);
+    if (t.startsWith('0')) t = t.replace(/^0+/, '');
+    return t;
+  };
   const normalizeName = (s: string) => (s ?? '').trim().toLowerCase();
 
   const byPhone = new Map<string, typeof agents>();
@@ -410,9 +417,10 @@ agentsRouter.get('/quality-check', async c => {
       invalidPhones.push({ id: a.id, nom: a.nom, prenom: a.prenom, telephone: a.telephone, actif: a.actif });
     }
 
-    const arr = byPhone.get(tel) ?? [];
+    const telKey = sigPhone(a.telephone);
+    const arr = byPhone.get(telKey) ?? [];
     arr.push(a);
-    byPhone.set(tel, arr);
+    byPhone.set(telKey, arr);
   }
 
   const phoneDuplicates = Array.from(byPhone.entries())
@@ -1883,10 +1891,13 @@ portalRouter.post('/login', async c => {
   const normalizedTel = normalizePhone(telephone);
   if (!normalizedTel) return c.json({ error: 'Numéro invalide' }, 400);
 
-  // Chercher l'agent par numéro (fin du numéro pour tolérer préfixes pays)
+  // Chercher l'agent par numéro (fin du numéro pour tolérer préfixes pays).
+  // Le même numéro peut exister sur plusieurs lignes sous des formats différents
+  // (doublon historique invalidé) → préférer la ligne active puis la plus récente.
   const agent = await c.env.DB.prepare(
     `SELECT id, nom, prenom, telephone, quota_gb, role_label, actif, client, zone
-     FROM agents WHERE REPLACE(REPLACE(REPLACE(REPLACE(telephone, ' ', ''), '-', ''), '+', ''), '.', '') LIKE ?`
+     FROM agents WHERE REPLACE(REPLACE(REPLACE(REPLACE(telephone, ' ', ''), '-', ''), '+', ''), '.', '') LIKE ?
+     ORDER BY actif DESC, id DESC`
   ).bind(`%${normalizedTel}`).first<{ id: number; nom: string; prenom: string; telephone: string; quota_gb: number; role_label: string | null; actif: number; client: string | null; zone: string | null }>();
 
   if (!agent) return c.json({ error: 'Numéro introuvable dans la flotte. Vérifiez votre numéro.' }, 404);
